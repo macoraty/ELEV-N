@@ -54,7 +54,7 @@ export default function ElevatorConfiguratorPage() {
 
           {/* Quick info badges */}
           <div className="flex items-center gap-3">
-            <div className="hidden lg:flex items-center gap-4 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
+            <div className="hidden lg:flex items-center gap-3.5 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-400">Poço:</span>
                 <span className="text-cyan-400 font-bold">
@@ -68,6 +68,20 @@ export default function ElevatorConfiguratorPage() {
                   {state.larguraCabine} × {state.profundidadeCabine} mm
                 </span>
               </div>
+              <div className="w-[1px] h-3 bg-slate-800" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Lotação:</span>
+                <span className="text-emerald-400 font-bold">
+                  {results.numeroPassageiros} Pass.
+                </span>
+              </div>
+              <div className="w-[1px] h-3 bg-slate-800" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Carga:</span>
+                <span className="text-amber-400 font-bold">
+                  {results.cargaUtilKg} kg
+                </span>
+              </div>
             </div>
 
             {/* Mobile View Switcher */}
@@ -75,24 +89,26 @@ export default function ElevatorConfiguratorPage() {
               <button
                 type="button"
                 onClick={() => setMobileTab('config')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer ${
                   mobileTab === 'config'
                     ? 'bg-cyan-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Parâmetros
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Parâmetros</span>
               </button>
               <button
                 type="button"
                 onClick={() => setMobileTab('blueprint')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer ${
                   mobileTab === 'blueprint'
-                    ? 'bg-cyan-600 text-white shadow-sm'
+                    ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Planta Baixa
+                <Compass className="w-3.5 h-3.5" />
+                <span>Planta Baixa</span>
               </button>
             </div>
           </div>
@@ -109,7 +125,14 @@ export default function ElevatorConfiguratorPage() {
             }`}
           >
             <ConfigPanel state={state} onChange={setState} />
-            <ResultsPanel state={state} results={results} />
+            <ResultsPanel
+              state={state}
+              results={results}
+              onViewBlueprint={() => {
+                setMobileTab('blueprint');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
 
             {/* Standard & Reference Note */}
             <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-400 flex items-start gap-3">
@@ -119,9 +142,9 @@ export default function ElevatorConfiguratorPage() {
                   Normas de Referência & Engenharia:
                 </span>
                 <p className="leading-relaxed">
-                  Os cálculos de folgas mínimas, caixas de corrida e espaços de chassis
-                  seguem as diretrizes técnicas das normas ABNT NBR NM 207 (Elevadores Elétricos)
-                  e NBR NM 313 (Acessibilidade).
+                  Lotação de passageiros e carga útil nominal dimensionadas rigorosamente
+                  conforme a <strong className="text-slate-300">ABNT NBR 16858-1:2020</strong> (Tabela 6 - Carga Nominal vs Área Máxima e Tabela 7 - Número de Passageiros).
+                  Folgas estruturais da caixa de corrida e caixilhos conforme NBR NM 207 / NM 313.
                 </p>
               </div>
             </div>
@@ -134,11 +157,32 @@ export default function ElevatorConfiguratorPage() {
             }`}
           >
             <div className="h-[600px] sm:h-[680px] lg:h-[740px] w-full">
-              <BlueprintCanvas state={state} results={results} />
+              <BlueprintCanvas
+                state={state}
+                results={results}
+                activeTab={mobileTab}
+                onOpenBlueprintTab={() => setMobileTab('blueprint')}
+              />
             </div>
 
             {/* Quick summary cards underneath drawing */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5">
+                <span className="block text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                  Lotação
+                </span>
+                <span className="text-xs font-semibold text-emerald-400 mt-0.5 block truncate">
+                  {results.numeroPassageiros} Passageiros
+                </span>
+              </div>
+              <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5">
+                <span className="block text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                  Carga Útil (Q)
+                </span>
+                <span className="text-xs font-semibold text-amber-400 mt-0.5 block">
+                  {results.cargaUtilKg} kg
+                </span>
+              </div>
               <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5">
                 <span className="block text-[10px] text-slate-400 font-medium uppercase tracking-wider">
                   Acionamento
@@ -151,8 +195,8 @@ export default function ElevatorConfiguratorPage() {
                 <span className="block text-[10px] text-slate-400 font-medium uppercase tracking-wider">
                   Arcada / Sling
                 </span>
-                <span className="text-xs font-semibold text-slate-200 mt-0.5 block">
-                  {state.arcada === 'L' ? 'Tipo L (Mochila)' : 'Suspensão Central'}
+                <span className="text-xs font-semibold text-slate-200 mt-0.5 block truncate">
+                  {state.arcada === 'L' ? 'Tipo L' : 'Suspensão'}
                 </span>
               </div>
               <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2.5">

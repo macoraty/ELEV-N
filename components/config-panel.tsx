@@ -9,15 +9,18 @@ import {
   TipoPorta,
   TipoEntrada,
   LadoArcada,
+  LadoInstalacaoPorta,
   ACIONAMENTOS,
   ARCADAS,
   POSICOES,
   TIPOS_PORTA,
   TIPOS_ENTRADA,
   LADOS_ARCADA,
+  LADOS_INSTALACAO_PORTA,
   ABERTURAS_PORTA,
   ELEVATOR_PRESETS,
   ElevatorPreset,
+  getMaiorAberturaValida,
 } from '@/lib/elevator-calculator';
 import {
   Sliders,
@@ -28,6 +31,9 @@ import {
   Layers,
   Sparkles,
   HelpCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface ConfigPanelProps {
@@ -36,14 +42,51 @@ interface ConfigPanelProps {
 }
 
 export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
+  const larguraNum = parseInt(state.larguraCabine, 10) || 800;
+  const profundidadeNum = parseInt(state.profundidadeCabine, 10) || 1250;
+  const ladoInstalacao: LadoInstalacaoPorta = state.ladoPorta || 'Largura';
+  const ladoFacePorta = ladoInstalacao === 'Profundidade' ? profundidadeNum : larguraNum;
+  const ladoEfetivo =
+    state.tipoEntrada === 'Adjacente'
+      ? Math.min(larguraNum, profundidadeNum)
+      : ladoFacePorta;
+
+  const aberturaNum = parseInt(state.aberturaPorta, 10) || 700;
+  const isPortaValida = aberturaNum < ladoEfetivo;
+  const diferencaMm = ladoEfetivo - aberturaNum;
+  const montanteMm = Math.max(0, Math.round(diferencaMm / 2));
+  const maxAberturaSugerida = getMaiorAberturaValida(ladoEfetivo);
+
   const updateField = <K extends keyof ElevatorConfigState>(
     field: K,
     value: ElevatorConfigState[K]
   ) => {
-    onChange({
+    let nextState = {
       ...state,
       [field]: value,
-    });
+    };
+
+    // Se alterou largura, profundidade, tipo de entrada ou lado da porta,
+    // verifica se a porta atual ainda é estritamente menor que o lado da cabine.
+    if (
+      field === 'larguraCabine' ||
+      field === 'profundidadeCabine' ||
+      field === 'ladoPorta' ||
+      field === 'tipoEntrada'
+    ) {
+      const nextLargura = parseInt(nextState.larguraCabine, 10) || 800;
+      const nextProf = parseInt(nextState.profundidadeCabine, 10) || 1250;
+      const nextLado = (nextState.ladoPorta || 'Largura') === 'Profundidade' ? nextProf : nextLargura;
+      const nextLadoEfetivo =
+        nextState.tipoEntrada === 'Adjacente' ? Math.min(nextLargura, nextProf) : nextLado;
+      const nextAbertura = parseInt(nextState.aberturaPorta, 10) || 700;
+
+      if (nextAbertura >= nextLadoEfetivo) {
+        nextState.aberturaPorta = getMaiorAberturaValida(nextLadoEfetivo);
+      }
+    }
+
+    onChange(nextState);
   };
 
   const applyPreset = (preset: ElevatorPreset) => {
@@ -51,6 +94,7 @@ export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
       ...state,
       larguraCabine: preset.largura,
       profundidadeCabine: preset.profundidade,
+      ladoPorta: preset.ladoPorta || 'Largura',
       aberturaPorta: preset.aberturaPorta,
       acionamento: preset.acionamento,
       arcada: preset.arcada,
@@ -174,27 +218,145 @@ export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
           </div>
         </div>
 
+        {/* Lado de Instalação da Porta */}
+        <div className="mb-4">
+          <label className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">
+            <span className="flex items-center gap-1.5">
+              <DoorOpen className="w-3.5 h-3.5 text-cyan-400" />
+              Lado da Cabine Onde Vai a Porta
+            </span>
+            <span className="text-[11px] text-cyan-400 font-mono">
+              Face Ativa: {ladoEfetivo} mm
+            </span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              id="btn-lado-porta-largura"
+              type="button"
+              onClick={() => updateField('ladoPorta', 'Largura')}
+              className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                ladoInstalacao === 'Largura'
+                  ? 'bg-cyan-950/60 border-cyan-500 text-white shadow-sm'
+                  : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <div className="text-xs font-medium flex items-center justify-between">
+                <span>Na Largura (Frontal)</span>
+                {ladoInstalacao === 'Largura' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                )}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                Face: {larguraNum} mm
+              </div>
+            </button>
+
+            <button
+              id="btn-lado-porta-profundidade"
+              type="button"
+              onClick={() => updateField('ladoPorta', 'Profundidade')}
+              className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                ladoInstalacao === 'Profundidade'
+                  ? 'bg-cyan-950/60 border-cyan-500 text-white shadow-sm'
+                  : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <div className="text-xs font-medium flex items-center justify-between">
+                <span>Na Profundidade (Lateral)</span>
+                {ladoInstalacao === 'Profundidade' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                )}
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                Face: {profundidadeNum} mm
+              </div>
+            </button>
+          </div>
+          {state.tipoEntrada === 'Adjacente' && (
+            <p className="text-[11px] text-amber-400 mt-1.5">
+              * Entrada Adjacente: Portas na largura e na lateral simultaneamente. O vão de porta é limitado pela menor face ({ladoEfetivo} mm).
+            </p>
+          )}
+        </div>
+
         {/* Abertura da Porta */}
         <div>
-          <label
-            htmlFor="select-abertura-porta"
-            className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5"
-          >
-            <span>Abertura da Porta - Vão Livre (mm)</span>
-            <span className="text-[11px] text-amber-400 font-mono">Vão Acabado</span>
-          </label>
+          <div className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">
+            <label htmlFor="select-abertura-porta">
+              Abertura da Porta - Vão Livre (mm)
+            </label>
+            <span className="text-[11px] font-mono text-cyan-400">
+              Passo 100 mm (700 a 1200 mm)
+            </span>
+          </div>
           <select
             id="select-abertura-porta"
             value={state.aberturaPorta}
             onChange={(e) => updateField('aberturaPorta', e.target.value)}
-            className="w-full px-3 py-2 bg-slate-950 border border-slate-700 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 rounded-lg text-sm text-slate-100 font-mono transition-colors"
+            className={`w-full px-3 py-2 bg-slate-950 border rounded-lg text-sm text-slate-100 font-mono transition-colors ${
+              isPortaValida
+                ? 'border-slate-700 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400'
+                : 'border-rose-500 text-rose-300 focus:ring-1 focus:ring-rose-500'
+            }`}
           >
-            {ABERTURAS_PORTA.map((abertura) => (
-              <option key={abertura} value={abertura}>
-                {abertura} mm {abertura === '800' ? '(Padrão Residencial)' : abertura === '900' ? '(Norma Acessibilidade)' : ''}
-              </option>
-            ))}
+            {ABERTURAS_PORTA.map((abertura) => {
+              const valor = parseInt(abertura, 10);
+              const isMenor = valor < ladoEfetivo;
+              const sobra = ladoEfetivo - valor;
+              const montante = Math.max(0, Math.round(sobra / 2));
+
+              return (
+                <option
+                  key={abertura}
+                  value={abertura}
+                  disabled={!isMenor}
+                  className={isMenor ? 'text-slate-100 bg-slate-950' : 'text-slate-500 bg-slate-900'}
+                >
+                  {isMenor
+                    ? `${abertura} mm — Montantes: 2x ${montante} mm ${abertura === '800' ? '(Padrão)' : abertura === '900' ? '(Acessib.)' : ''}`
+                    : `${abertura} mm — (Inválido: ≥ ${ladoEfetivo} mm do lado da cabine)`}
+                </option>
+              );
+            })}
           </select>
+
+          {/* Feedback Visual da Regra de Porta */}
+          {isPortaValida ? (
+            <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 flex items-start gap-2 text-xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-emerald-300">
+                  Porta em conformidade: {aberturaNum} mm &lt; {ladoEfetivo} mm (face da cabine)
+                </div>
+                <p className="text-slate-300 text-[11px] mt-0.5">
+                  A porta é menor que o lado da cabine. Folga total para montantes frontais e marcos:{' '}
+                  <span className="font-mono text-emerald-300 font-semibold">{diferencaMm} mm</span>{' '}
+                  (<span className="font-mono text-emerald-300 font-semibold">{montanteMm} mm</span> de cada lado).
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2.5 p-2.5 rounded-lg bg-rose-950/60 border border-rose-500/60 flex items-start gap-2 text-xs">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-bold text-rose-200">
+                  Abertura inválida: a porta não pode ser igual ou maior que a face da cabine!
+                </div>
+                <p className="text-rose-300 text-[11px] mt-0.5">
+                  A face da cabine mede <span className="font-mono font-bold">{ladoEfetivo} mm</span> e a porta está em{' '}
+                  <span className="font-mono font-bold">{aberturaNum} mm</span>. Pela norma técnica e viabilidade estrutural, a porta deve ser sempre menor para permitir os montantes.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => updateField('aberturaPorta', maxAberturaSugerida)}
+                  className="mt-2 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-md font-medium text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>Ajustar automaticamente para {maxAberturaSugerida} mm</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
