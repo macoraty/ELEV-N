@@ -6,6 +6,7 @@ import {
   INITIAL_STATE,
   calculateElevator,
 } from '@/lib/elevator-calculator';
+import { generateElevatorPdf } from '@/lib/elevator-pdf';
 import { ConfigPanel } from '@/components/config-panel';
 import { ResultsPanel } from '@/components/results-panel';
 import { BlueprintCanvas } from '@/components/blueprint-canvas';
@@ -18,15 +19,40 @@ import {
   Info,
   CheckCircle2,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 
 export default function ElevatorConfiguratorPage() {
   const [state, setState] = useState<ElevatorConfigState>(INITIAL_STATE);
   const [mobileTab, setMobileTab] = useState<'config' | 'blueprint'>('config');
+  const [configMode, setConfigMode] = useState<'cabine' | 'poco'>('cabine');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const results = useMemo(() => {
     return calculateElevator(state);
   }, [state]);
+
+  const handleGeneratePdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      let blueprintDataUrl: string | undefined = undefined;
+      const canvasEl = document.getElementById(
+        'elevator-blueprint-canvas'
+      ) as HTMLCanvasElement | null;
+      if (canvasEl) {
+        try {
+          blueprintDataUrl = canvasEl.toDataURL('image/png');
+        } catch (e) {
+          console.warn('Canvas capture error:', e);
+        }
+      }
+      await generateElevatorPdf({ state, results, blueprintDataUrl });
+    } catch (e) {
+      console.error('Erro ao gerar PDF:', e);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -84,6 +110,52 @@ export default function ElevatorConfiguratorPage() {
               </div>
             </div>
 
+            {/* Header Calcular por Poço Button */}
+            <button
+              id="btn-header-calc-poco"
+              type="button"
+              onClick={() => {
+                setConfigMode(configMode === 'poco' ? 'cabine' : 'poco');
+                setMobileTab('config');
+              }}
+              title="Dimensionamento Inverso: Informar tamanho do poço e calcular cabines em múltiplos de 50 mm"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer border ${
+                configMode === 'poco'
+                  ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Calcular por Poço</span>
+              <span className="sm:hidden">Poço</span>
+              <span className="hidden md:inline px-1 py-0.2 bg-emerald-500/20 text-emerald-300 text-[10px] rounded font-mono">
+                50mm
+              </span>
+            </button>
+
+            {/* Header Gerar PDF Button */}
+            <button
+              id="btn-header-pdf"
+              type="button"
+              onClick={handleGeneratePdf}
+              disabled={isGeneratingPdf}
+              title="Gerar e baixar relatório técnico completo em PDF (ABNT NBR 16858-1)"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="hidden sm:inline">Gerando...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Gerar PDF</span>
+                  <span className="sm:hidden">PDF</span>
+                </>
+              )}
+            </button>
+
             {/* Mobile View Switcher */}
             <div className="flex lg:hidden bg-slate-900 border border-slate-800 p-0.5 rounded-lg text-xs">
               <button
@@ -124,12 +196,22 @@ export default function ElevatorConfiguratorPage() {
               mobileTab === 'blueprint' ? 'hidden lg:flex' : 'flex'
             }`}
           >
-            <ConfigPanel state={state} onChange={setState} />
+            <ConfigPanel
+              state={state}
+              onChange={setState}
+              configMode={configMode}
+              onConfigModeChange={setConfigMode}
+            />
             <ResultsPanel
               state={state}
               results={results}
               onViewBlueprint={() => {
                 setMobileTab('blueprint');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onOpenShaftCalculator={() => {
+                setConfigMode('poco');
+                setMobileTab('config');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />

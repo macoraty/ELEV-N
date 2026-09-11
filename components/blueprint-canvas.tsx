@@ -5,6 +5,7 @@ import {
   ElevatorConfigState,
   ElevatorCalculationResults,
 } from '@/lib/elevator-calculator';
+import { generateElevatorPdf } from '@/lib/elevator-pdf';
 import {
   ZoomIn,
   ZoomOut,
@@ -20,6 +21,8 @@ import {
   FileImage,
   Printer,
   Sparkles,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 
 interface BlueprintCanvasProps {
@@ -45,6 +48,41 @@ export function BlueprintCanvas({
   const [exportBlob, setExportBlob] = useState<Blob | null>(null);
   const [copiedImage, setCopiedImage] = useState(false);
   const [isGeneratingExport, setIsGeneratingExport] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleDownloadPdfClick = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      let dataUrl: string | undefined = undefined;
+      try {
+        const offCanvas = document.createElement('canvas');
+        const exportW = 2400;
+        const exportH = 1600;
+        offCanvas.width = exportW;
+        offCanvas.height = exportH;
+        const offCtx = offCanvas.getContext('2d');
+        if (offCtx) {
+          renderBlueprintToContext(offCtx, exportW, exportH, 1, true);
+          dataUrl = offCanvas.toDataURL('image/png', 0.95);
+        }
+      } catch (err) {
+        console.warn('Fallback to screen canvas for PDF:', err);
+        if (canvasRef.current) {
+          dataUrl = canvasRef.current.toDataURL('image/png');
+        }
+      }
+
+      await generateElevatorPdf({
+        state,
+        results,
+        blueprintDataUrl: dataUrl,
+      });
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   // Core drawing routine that can render to any canvas (on-screen or high-res offscreen)
   const renderBlueprintToContext = useCallback(
@@ -1347,7 +1385,29 @@ export function BlueprintCanvas({
 
             <div className="h-4 w-[1px] bg-slate-800 mx-1" />
 
-            {/* Prominent Download Button */}
+            {/* Prominent PDF Report Button */}
+            <button
+              id="btn-download-pdf-blueprint"
+              type="button"
+              onClick={handleDownloadPdfClick}
+              disabled={isGeneratingPdf}
+              title="Gerar e Baixar Relatório Técnico Completo em PDF (NBR 16858-1)"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 shadow-sm rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="hidden sm:inline">Gerando PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>Gerar PDF</span>
+                </>
+              )}
+            </button>
+
+            {/* Prominent Download Image Button */}
             <button
               id="btn-download-blueprint"
               type="button"
@@ -1356,7 +1416,7 @@ export function BlueprintCanvas({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm rounded-lg transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Baixar Desenho</span>
+              <span className="hidden sm:inline">Baixar Desenho</span>
             </button>
 
             <button
@@ -1379,6 +1439,7 @@ export function BlueprintCanvas({
         <div className="relative flex-1 w-full h-full min-h-[440px] bg-[#081426] flex items-center justify-center overflow-hidden">
           <canvas
             ref={canvasRef}
+            id="elevator-blueprint-canvas"
             className="w-full h-full block cursor-crosshair touch-none"
           />
 
@@ -1531,12 +1592,31 @@ export function BlueprintCanvas({
                       const filename = `planta-baixa-elevador-${results.larguraPoco}x${results.profundidadePoco}-nbr16858-1.png`;
                       triggerDownloadFile(exportBlob, filename);
                     }}
-                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow transition-colors cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Baixar Arquivo PNG</span>
+                    <span>Baixar Imagem PNG</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleDownloadPdfClick}
+                  disabled={isGeneratingPdf}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-500 rounded-lg shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isGeneratingPdf ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Gerando PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-4 h-4" />
+                      <span>Baixar Relatório em PDF</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

@@ -42,6 +42,20 @@ export interface ElevatorConfigState {
   tipoPorta: TipoPorta;
   tipoEntrada: TipoEntrada;
   ladoArcada: LadoArcada;
+  // Custom clearances overrides
+  customMenorFolga?: number;
+  customFolgaFrontal?: number;
+  customFolgaFundo?: number;
+  // Rules overrides
+  baseChassisHidraulicoL?: number;
+  baseChassisHidraulicoSuspensao?: number;
+  baseChassisEletricoL?: number;
+  baseChassisEletricoSuspensaoLateral?: number;
+  baseChassisEletricoSuspensaoFundo?: number;
+  basePorta2FL?: number;
+  basePorta3FL?: number;
+  basePorta2FC?: number;
+  basePorta4FC?: number;
 }
 
 export interface ElevatorCalculationResults {
@@ -311,16 +325,16 @@ export function calculateElevator(state: ElevatorConfigState): ElevatorCalculati
   let folgaPorta = 450;
   switch (state.tipoPorta) {
     case '2 Folhas Lateral':
-      folgaPorta = 450 + indexAbertura * 60;
+      folgaPorta = (state.basePorta2FL ?? 450) + indexAbertura * 60;
       break;
     case '3 Folhas Lateral':
-      folgaPorta = 320 + indexAbertura * 45;
+      folgaPorta = (state.basePorta3FL ?? 320) + indexAbertura * 45;
       break;
     case '2 Folhas Central':
-      folgaPorta = 420 + indexAbertura * 50;
+      folgaPorta = (state.basePorta2FC ?? 420) + indexAbertura * 50;
       break;
     case '4 Folhas Central':
-      folgaPorta = 280 + indexAbertura * 35;
+      folgaPorta = (state.basePorta4FC ?? 280) + indexAbertura * 35;
       break;
     default:
       folgaPorta = 450;
@@ -328,20 +342,20 @@ export function calculateElevator(state: ElevatorConfigState): ElevatorCalculati
 
   let espacoChassis = 400;
   if (state.acionamento === 'Hidráulico' && state.arcada === 'L') {
-    espacoChassis = 320;
+    espacoChassis = state.baseChassisHidraulicoL ?? 320;
   } else if (state.acionamento === 'Hidráulico') {
-    espacoChassis = 280;
+    espacoChassis = state.baseChassisHidraulicoSuspensao ?? 280;
   } else if (state.arcada === 'L') {
-    espacoChassis = 450;
+    espacoChassis = state.baseChassisEletricoL ?? 450;
   } else if (state.ladoArcada === 'Lateral') {
-    espacoChassis = 420;
+    espacoChassis = state.baseChassisEletricoSuspensaoLateral ?? 420;
   } else {
-    espacoChassis = 400;
+    espacoChassis = state.baseChassisEletricoSuspensaoFundo ?? 400;
   }
 
-  const menorFolga = 125;
-  const folgaFrontal = 160;
-  const folgaFundoPadrao = 120;
+  const menorFolga = state.customMenorFolga ?? 125;
+  const folgaFrontal = state.customFolgaFrontal ?? 160;
+  const folgaFundoPadrao = state.customFolgaFundo ?? 120;
 
   const folgaEntradaOposta = state.tipoEntrada === 'Oposta' ? 160 : 0;
   const folgaEntradaAdjacente = state.tipoEntrada === 'Adjacente' ? 160 : 0;
@@ -415,3 +429,333 @@ export function calculateElevator(state: ElevatorConfigState): ElevatorCalculati
     erroValidacaoPorta,
   };
 }
+
+// ============================================================================
+// DIMENSIONAMENTO INVERSO: CÁLCULO DE CABINES POSSÍVEIS A PARTIR DO POÇO
+// TODAS AS MEDIDAS DE CABINE SÃO OBRIGATORIAMENTE MÚLTIPLOS DE 50 (SEM QUEBRADOS)
+// ============================================================================
+
+export interface PossibleCabinOption {
+  larguraCabine: number; // Múltiplo estrito de 50
+  profundidadeCabine: number; // Múltiplo estrito de 50
+  areaCabineM2: number;
+  numeroPassageiros: number;
+  cargaUtilKg: number;
+  maxAberturaPorta: string;
+  larguraPocoMinima: number;
+  profundidadePocoMinima: number;
+  sobraLarguraPoco: number; // LP_informado - larguraPocoMinima
+  sobraProfundidadePoco: number; // PP_informado - profundidadePocoMinima
+  isMaxAproveitamento: boolean;
+  proporcao: 'Quadrada' | 'Profunda' | 'Larga';
+  tag?: string;
+}
+
+export interface ShaftToCabinsInput {
+  larguraPoco: number;
+  profundidadePoco: number;
+  acionamento?: Acionamento;
+  arcada?: Arcada;
+  ladoArcada?: LadoArcada;
+  tipoEntrada?: TipoEntrada;
+  tipoPorta?: TipoPorta;
+  ladoPorta?: LadoInstalacaoPorta;
+  customMenorFolga?: number;
+  customFolgaFrontal?: number;
+  customFolgaFundo?: number;
+  baseChassisHidraulicoL?: number;
+  baseChassisHidraulicoSuspensao?: number;
+  baseChassisEletricoL?: number;
+  baseChassisEletricoSuspensaoLateral?: number;
+  baseChassisEletricoSuspensaoFundo?: number;
+}
+
+export interface ShaftToCabinsResult {
+  larguraPocoInformada: number;
+  profundidadePocoInformada: number;
+  larguraCabineMax: number; // Múltiplo de 50
+  profundidadeCabineMax: number; // Múltiplo de 50
+  cabineMaxima: PossibleCabinOption | null;
+  cabinesPossiveis: PossibleCabinOption[];
+  espacoChassis: number;
+  menorFolga: number;
+  folgaFrontal: number;
+  folgaFundoPadrao: number;
+  isPocoInsuficiente: boolean;
+  motivoInsuficiente?: string;
+}
+
+export function calculateShaftClearances({
+  acionamento = 'Elétrico',
+  arcada = 'L',
+  ladoArcada = 'Lateral',
+  tipoEntrada = 'Unilateral',
+  customMenorFolga,
+  customFolgaFrontal,
+  customFolgaFundo,
+  baseChassisHidraulicoL,
+  baseChassisHidraulicoSuspensao,
+  baseChassisEletricoL,
+  baseChassisEletricoSuspensaoLateral,
+  baseChassisEletricoSuspensaoFundo,
+}: {
+  acionamento?: Acionamento;
+  arcada?: Arcada;
+  ladoArcada?: LadoArcada;
+  tipoEntrada?: TipoEntrada;
+  customMenorFolga?: number;
+  customFolgaFrontal?: number;
+  customFolgaFundo?: number;
+  baseChassisHidraulicoL?: number;
+  baseChassisHidraulicoSuspensao?: number;
+  baseChassisEletricoL?: number;
+  baseChassisEletricoSuspensaoLateral?: number;
+  baseChassisEletricoSuspensaoFundo?: number;
+}) {
+  let espacoChassis = 400;
+  if (acionamento === 'Hidráulico' && arcada === 'L') {
+    espacoChassis = baseChassisHidraulicoL ?? 320;
+  } else if (acionamento === 'Hidráulico') {
+    espacoChassis = baseChassisHidraulicoSuspensao ?? 280;
+  } else if (arcada === 'L') {
+    espacoChassis = baseChassisEletricoL ?? 450;
+  } else if (ladoArcada === 'Lateral') {
+    espacoChassis = baseChassisEletricoSuspensaoLateral ?? 420;
+  } else {
+    espacoChassis = baseChassisEletricoSuspensaoFundo ?? 400;
+  }
+
+  const menorFolga = customMenorFolga ?? 125;
+  const folgaFrontal = customFolgaFrontal ?? 160;
+  const folgaFundoPadrao = customFolgaFundo ?? 120;
+  const folgaEntradaOposta = tipoEntrada === 'Oposta' ? 160 : 0;
+  const folgaEntradaAdjacente = tipoEntrada === 'Adjacente' ? 160 : 0;
+
+  // Espaço deduzido da Largura do Poço
+  const espacoFixoLargura =
+    ladoArcada === 'Lateral'
+      ? espacoChassis + menorFolga + folgaEntradaAdjacente
+      : menorFolga * 2 + folgaEntradaAdjacente;
+
+  // Espaço deduzido da Profundidade do Poço
+  const espacoFixoProfundidade =
+    ladoArcada === 'Fundo'
+      ? folgaFrontal + espacoChassis + folgaEntradaOposta
+      : folgaFrontal + folgaFundoPadrao + folgaEntradaOposta;
+
+  return {
+    espacoChassis,
+    menorFolga,
+    folgaFrontal,
+    folgaFundoPadrao,
+    folgaEntradaOposta,
+    folgaEntradaAdjacente,
+    espacoFixoLargura,
+    espacoFixoProfundidade,
+  };
+}
+
+/**
+ * Calcula todas as dimensões de cabine possíveis para uma determinada medida de poço.
+ * Garante que TODAS as medidas de cabine (largura e profundidade) sejam estritamente
+ * múltiplos de 50 mm (arredondamento seguro para baixo, sem números quebrados).
+ */
+export function calculatePossibleCabinsFromShaft(
+  input: ShaftToCabinsInput
+): ShaftToCabinsResult {
+  const lp = Math.max(0, input.larguraPoco);
+  const pp = Math.max(0, input.profundidadePoco);
+
+  const acionamento = input.acionamento || 'Elétrico';
+  const arcada = input.arcada || 'L';
+  const ladoArcada = input.ladoArcada || 'Lateral';
+  const tipoEntrada = input.tipoEntrada || 'Unilateral';
+  const ladoPorta = input.ladoPorta || 'Largura';
+
+  const clearances = calculateShaftClearances({
+    acionamento,
+    arcada,
+    ladoArcada,
+    tipoEntrada,
+    customMenorFolga: input.customMenorFolga,
+    customFolgaFrontal: input.customFolgaFrontal,
+    customFolgaFundo: input.customFolgaFundo,
+    baseChassisHidraulicoL: input.baseChassisHidraulicoL,
+    baseChassisHidraulicoSuspensao: input.baseChassisHidraulicoSuspensao,
+    baseChassisEletricoL: input.baseChassisEletricoL,
+    baseChassisEletricoSuspensaoLateral: input.baseChassisEletricoSuspensaoLateral,
+    baseChassisEletricoSuspensaoFundo: input.baseChassisEletricoSuspensaoFundo,
+  });
+
+  // Espaço livre máximo bruto disponível
+  const maxLarguraBruta = lp - clearances.espacoFixoLargura;
+  const maxProfundidadeBruta = pp - clearances.espacoFixoProfundidade;
+
+  // Arredonda para baixo para o múltiplo de 50 mm mais próximo (sem número quebrado!)
+  const larguraCabineMax = Math.max(0, Math.floor(maxLarguraBruta / 50) * 50);
+  const profundidadeCabineMax = Math.max(0, Math.floor(maxProfundidadeBruta / 50) * 50);
+
+  // Verificação de poço insuficiente
+  if (larguraCabineMax < 700 || profundidadeCabineMax < 750) {
+    return {
+      larguraPocoInformada: lp,
+      profundidadePocoInformada: pp,
+      larguraCabineMax,
+      profundidadeCabineMax,
+      cabineMaxima: null,
+      cabinesPossiveis: [],
+      espacoChassis: clearances.espacoChassis,
+      menorFolga: clearances.menorFolga,
+      folgaFrontal: clearances.folgaFrontal,
+      folgaFundoPadrao: clearances.folgaFundoPadrao,
+      isPocoInsuficiente: true,
+      motivoInsuficiente: `Dimensão de poço insuficiente para um elevador normatizado. O espaço útil resultante seria de ${larguraCabineMax} × ${profundidadeCabineMax} mm (mínimo recomendado: cabine de 800 × 1200 mm, exigindo poço mín. de aprox. ${800 + clearances.espacoFixoLargura} × ${1200 + clearances.espacoFixoProfundidade} mm).`,
+    };
+  }
+
+  // Gera opções viáveis em múltiplos de 50 mm
+  // 1. Gera variações sistemáticas com passo de 50 mm
+  const pairsSet = new Set<string>();
+  const addPair = (w: number, d: number) => {
+    // Garante que é múltiplo de 50
+    const w50 = Math.floor(w / 50) * 50;
+    const d50 = Math.floor(d / 50) * 50;
+    if (w50 >= 700 && w50 <= larguraCabineMax && d50 >= 800 && d50 <= profundidadeCabineMax) {
+      pairsSet.add(`${w50}x${d50}`);
+    }
+  };
+
+  // Cabine Máxima
+  addPair(larguraCabineMax, profundidadeCabineMax);
+
+  // Variações a partir do máximo em múltiplos de 50
+  const minW = Math.max(750, larguraCabineMax - 400);
+  const minD = Math.max(800, profundidadeCabineMax - 500);
+
+  for (let w = larguraCabineMax; w >= minW; w -= 50) {
+    for (let d = profundidadeCabineMax; d >= minD; d -= 50) {
+      addPair(w, d);
+    }
+  }
+
+  // Adiciona tamanhos de mercado padronizados se couberem no poço
+  const standardSizes = [
+    [800, 1200],
+    [850, 1200],
+    [900, 1200],
+    [900, 1300],
+    [950, 1300],
+    [1000, 1250],
+    [1000, 1300],
+    [1000, 1400],
+    [1050, 1300],
+    [1050, 1400],
+    [1100, 1400], // NBR 313 Acessibilidade
+    [1100, 1450],
+    [1200, 1400],
+    [1200, 1500],
+    [1200, 2100], // Maca
+    [1300, 2100], // Maca
+  ];
+
+  for (const [sw, sd] of standardSizes) {
+    if (sw <= larguraCabineMax && sd <= profundidadeCabineMax) {
+      addPair(sw, sd);
+    }
+  }
+
+  // Converte para objetos estruturados
+  const cabinesPossiveis: PossibleCabinOption[] = [];
+
+  pairsSet.forEach((pairKey) => {
+    const [wStr, dStr] = pairKey.split('x');
+    const w = parseInt(wStr, 10);
+    const d = parseInt(dStr, 10);
+
+    const areaM2 = Number(((w * d) / 1_000_000).toFixed(2));
+    const passageiros = calcularPassageirosNBR(areaM2);
+    const carga = calcularCargaUtilNBR(areaM2, passageiros).cargaNominalPadrao;
+
+    // Porta compatível
+    const ladoFace = ladoPorta === 'Profundidade' ? d : w;
+    const ladoEfetivo = tipoEntrada === 'Adjacente' ? Math.min(w, d) : ladoFace;
+    const maxAbertura = getMaiorAberturaValida(ladoEfetivo);
+
+    // Poço mínimo exigido por esta cabine
+    const lpMin =
+      ladoArcada === 'Lateral'
+        ? w + clearances.espacoChassis + clearances.menorFolga + clearances.folgaEntradaAdjacente
+        : w + clearances.menorFolga * 2 + clearances.folgaEntradaAdjacente;
+
+    const ppMin =
+      ladoArcada === 'Fundo'
+        ? d + clearances.folgaFrontal + clearances.espacoChassis + clearances.folgaEntradaOposta
+        : d + clearances.folgaFrontal + clearances.folgaFundoPadrao + clearances.folgaEntradaOposta;
+
+    const sobraLP = lp - lpMin;
+    const sobraPP = pp - ppMin;
+
+    const isMax = w === larguraCabineMax && d === profundidadeCabineMax;
+
+    let proporcao: 'Quadrada' | 'Profunda' | 'Larga' = 'Quadrada';
+    if (d > w + 100) proporcao = 'Profunda';
+    else if (w > d + 100) proporcao = 'Larga';
+
+    let tag: string | undefined = undefined;
+    if (isMax) {
+      tag = 'Aproveitamento Máximo';
+    } else if (w >= 1100 && d >= 1400) {
+      tag = 'Acessibilidade Cadeirante (NBR 313)';
+    } else if (w >= 1200 && d >= 2100) {
+      tag = 'Maca Hospitalar';
+    } else if ((w === 1000 && d === 1250) || (w === 1000 && d === 1300)) {
+      tag = 'Comercial Padrão (6 Pass.)';
+    } else if (w <= 900 && d <= 1200) {
+      tag = 'Residencial Compacto';
+    }
+
+    cabinesPossiveis.push({
+      larguraCabine: w,
+      profundidadeCabine: d,
+      areaCabineM2: areaM2,
+      numeroPassageiros: passageiros,
+      cargaUtilKg: carga,
+      maxAberturaPorta: maxAbertura,
+      larguraPocoMinima: lpMin,
+      profundidadePocoMinima: ppMin,
+      sobraLarguraPoco: sobraLP,
+      sobraProfundidadePoco: sobraPP,
+      isMaxAproveitamento: isMax,
+      proporcao,
+      tag,
+    });
+  });
+
+  // Ordena: primeiro a máxima, depois por área útil decrescente
+  cabinesPossiveis.sort((a, b) => {
+    if (a.isMaxAproveitamento) return -1;
+    if (b.isMaxAproveitamento) return 1;
+    if (b.areaCabineM2 !== a.areaCabineM2) {
+      return b.areaCabineM2 - a.areaCabineM2;
+    }
+    return b.larguraCabine - a.larguraCabine;
+  });
+
+  const cabineMaxima =
+    cabinesPossiveis.find((c) => c.isMaxAproveitamento) || cabinesPossiveis[0] || null;
+
+  return {
+    larguraPocoInformada: lp,
+    profundidadePocoInformada: pp,
+    larguraCabineMax,
+    profundidadeCabineMax,
+    cabineMaxima,
+    cabinesPossiveis,
+    espacoChassis: clearances.espacoChassis,
+    menorFolga: clearances.menorFolga,
+    folgaFrontal: clearances.folgaFrontal,
+    folgaFundoPadrao: clearances.folgaFundoPadrao,
+    isPocoInsuficiente: false,
+  };
+}
+

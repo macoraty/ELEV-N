@@ -21,6 +21,7 @@ import {
   ELEVATOR_PRESETS,
   ElevatorPreset,
   getMaiorAberturaValida,
+  calculateShaftClearances,
 } from '@/lib/elevator-calculator';
 import {
   Sliders,
@@ -34,14 +35,46 @@ import {
   AlertTriangle,
   CheckCircle2,
   ArrowRightLeft,
+  Building2,
 } from 'lucide-react';
+import { ShaftCalculator } from './shaft-calculator';
+import { ClearancesConfigModal } from './clearances-config-modal';
 
 interface ConfigPanelProps {
   state: ElevatorConfigState;
   onChange: (newState: ElevatorConfigState) => void;
+  configMode?: 'cabine' | 'poco';
+  onConfigModeChange?: (mode: 'cabine' | 'poco') => void;
 }
 
-export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
+export function ConfigPanel({
+  state,
+  onChange,
+  configMode: controlledMode,
+  onConfigModeChange,
+}: ConfigPanelProps) {
+  const [internalMode, setInternalMode] = React.useState<'cabine' | 'poco'>('cabine');
+  const [showClearancesModal, setShowClearancesModal] = React.useState(false);
+  const activeMode = controlledMode !== undefined ? controlledMode : internalMode;
+
+  const setMode = (mode: 'cabine' | 'poco') => {
+    if (onConfigModeChange) {
+      onConfigModeChange(mode);
+    } else {
+      setInternalMode(mode);
+    }
+  };
+
+  const defaultClearances = React.useMemo(() => {
+    return calculateShaftClearances({
+      acionamento: state.acionamento,
+      arcada: state.arcada,
+      ladoArcada: state.ladoArcada,
+      tipoEntrada: state.tipoEntrada,
+    });
+  }, [state.acionamento, state.arcada, state.ladoArcada, state.tipoEntrada]);
+
+
   const larguraNum = parseInt(state.larguraCabine, 10) || 800;
   const profundidadeNum = parseInt(state.profundidadeCabine, 10) || 1250;
   const ladoInstalacao: LadoInstalacaoPorta = state.ladoPorta || 'Largura';
@@ -104,51 +137,109 @@ export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Quick Presets selector */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-              Modelos Padrão / Presets Rápidos
-            </h3>
-          </div>
-          <span className="text-[11px] text-slate-400 font-mono">NBR NM 207 / NM 313</span>
-        </div>
+      {/* Container de Abas e Ações Globais */}
+      <div className="flex items-center gap-2">
+        {/* Segmented Controller: Alternar entre Dimensionar por Cabine e por Poço */}
+        <div className="flex-1 bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex gap-1 shadow-sm">
+          <button
+            id="btn-mode-cabine"
+            type="button"
+            onClick={() => setMode('cabine')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeMode === 'cabine'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Box className="w-4 h-4" />
+            <span className="hidden sm:inline">Configurar por Cabine</span>
+            <span className="sm:hidden">Por Cabine</span>
+          </button>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {ELEVATOR_PRESETS.map((preset) => {
-            const isSelected =
-              state.larguraCabine === preset.largura &&
-              state.profundidadeCabine === preset.profundidade &&
-              state.aberturaPorta === preset.aberturaPorta &&
-              state.acionamento === preset.acionamento &&
-              state.arcada === preset.arcada &&
-              state.tipoPorta === preset.tipoPorta;
-
-            return (
-              <button
-                key={preset.id}
-                id={`preset-${preset.id}`}
-                type="button"
-                onClick={() => applyPreset(preset)}
-                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
-                  isSelected
-                    ? 'border-cyan-500 bg-cyan-950/40 text-cyan-200 shadow-sm shadow-cyan-900/30'
-                    : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
-                }`}
-              >
-                <span className="text-xs font-medium leading-snug line-clamp-1">
-                  {preset.nome}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono mt-1">
-                  {preset.largura}×{preset.profundidade} mm
-                </span>
-              </button>
-            );
-          })}
+          <button
+            id="btn-mode-poco"
+            type="button"
+            onClick={() => setMode('poco')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeMode === 'poco'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-emerald-300" />
+            <span className="hidden sm:inline">Calcular por Poço</span>
+            <span className="sm:hidden">Por Poço</span>
+            <span className="hidden sm:inline-block px-1.5 py-0.5 bg-emerald-950/60 text-emerald-200 border border-emerald-500/30 text-[10px] rounded font-mono font-bold">
+              Múlt. 50
+            </span>
+          </button>
         </div>
+        
+        <button
+          onClick={() => setShowClearancesModal(true)}
+          title="Configurar Folgas Técnicas"
+          className="p-3 shrink-0 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors rounded-xl flex items-center justify-center"
+        >
+          <Settings2 className="w-5 h-5" />
+        </button>
       </div>
+
+      {/* Renderização Condicional: Modo Poço (Inverso) ou Modo Cabine (Direto) */}
+      {activeMode === 'poco' ? (
+        <ShaftCalculator
+          currentState={state}
+          onApplyCabin={(newState) => {
+            onChange(newState);
+          }}
+        />
+      ) : (
+        <>
+          {/* Quick Presets selector */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                  Modelos Padrão / Presets Rápidos
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">NBR NM 207 / NM 313</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {ELEVATOR_PRESETS.map((preset) => {
+                const isSelected =
+                  state.larguraCabine === preset.largura &&
+                  state.profundidadeCabine === preset.profundidade &&
+                  state.aberturaPorta === preset.aberturaPorta &&
+                  state.acionamento === preset.acionamento &&
+                  state.arcada === preset.arcada &&
+                  state.tipoPorta === preset.tipoPorta;
+
+                return (
+                  <button
+                    key={preset.id}
+                    id={`preset-${preset.id}`}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                      isSelected
+                        ? 'border-cyan-500 bg-cyan-950/40 text-cyan-200 shadow-sm shadow-cyan-900/30'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <span className="text-xs font-medium leading-snug line-clamp-1">
+                      {preset.nome}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1">
+                      {preset.largura}×{preset.profundidade} mm
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
 
       {/* Dimensões da Cabine Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 shadow-sm">
@@ -508,6 +599,15 @@ export function ConfigPanel({ state, onChange }: ConfigPanelProps) {
           </div>
         </div>
       </div>
+      </>
+      )}
+
+      <ClearancesConfigModal
+        isOpen={showClearancesModal}
+        onClose={() => setShowClearancesModal(false)}
+        state={state}
+        onChange={onChange}
+      />
     </div>
   );
 }

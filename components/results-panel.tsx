@@ -5,6 +5,7 @@ import {
   ElevatorConfigState,
   ElevatorCalculationResults,
 } from '@/lib/elevator-calculator';
+import { generateElevatorPdf } from '@/lib/elevator-pdf';
 import {
   Calculator,
   Copy,
@@ -15,20 +16,53 @@ import {
   Ruler,
   Maximize2,
   Info,
+  FileDown,
+  Loader2,
+  Building2,
 } from 'lucide-react';
 
 interface ResultsPanelProps {
   state: ElevatorConfigState;
   results: ElevatorCalculationResults;
   onViewBlueprint?: () => void;
+  onOpenShaftCalculator?: () => void;
 }
 
 export function ResultsPanel({
   state,
   results,
   onViewBlueprint,
+  onOpenShaftCalculator,
 }: ResultsPanelProps) {
   const [copied, setCopied] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleGeneratePdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      let blueprintDataUrl: string | undefined = undefined;
+      const canvasEl = document.getElementById(
+        'elevator-blueprint-canvas'
+      ) as HTMLCanvasElement | null;
+      if (canvasEl) {
+        try {
+          blueprintDataUrl = canvasEl.toDataURL('image/png');
+        } catch (e) {
+          console.warn('Could not read canvas data URL:', e);
+        }
+      }
+
+      await generateElevatorPdf({
+        state,
+        results,
+        blueprintDataUrl,
+      });
+    } catch (err) {
+      console.error('Erro ao gerar relatório em PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   const handleCopyReport = async () => {
     const report = `
@@ -102,24 +136,47 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
           </div>
         </div>
 
-        <button
-          id="btn-copy-report"
-          type="button"
-          onClick={handleCopyReport}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg transition-colors cursor-pointer"
-        >
-          {copied ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-300">Copiado!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5 text-slate-400" />
-              <span>Copiar Dados</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-generate-pdf-header"
+            type="button"
+            onClick={handleGeneratePdf}
+            disabled={isGeneratingPdf}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/50 rounded-lg transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            title="Gerar e baixar relatório técnico em PDF (ABNT NBR 16858-1)"
+          >
+            {isGeneratingPdf ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Gerando PDF...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Gerar PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
+            id="btn-copy-report"
+            type="button"
+            onClick={handleCopyReport}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg transition-colors cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-300">Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-400" />
+                <span>Copiar</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Primary Highlights: 4 Key Result Cards */}
@@ -211,6 +268,31 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
           </p>
         </div>
       </div>
+
+      {/* Atalho para Dimensionamento Inverso por Poço */}
+      {onOpenShaftCalculator && (
+        <div className="mb-4 p-3 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-cyan-950/40 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <span className="font-semibold text-slate-200 block">
+                Já tem as medidas do poço da obra?
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Calcule os tamanhos de cabine possíveis em múltiplos de 50 mm (sem medidas quebradas).
+              </span>
+            </div>
+          </div>
+          <button
+            id="btn-open-shaft-calc"
+            type="button"
+            onClick={onOpenShaftCalculator}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 shadow-sm"
+          >
+            Calcular por Poço
+          </button>
+        </div>
+      )}
 
       {/* Technical Breakdown: Capacidade ABNT NBR 16858-1 */}
       <div className="mb-3 bg-slate-950/60 border border-emerald-900/40 rounded-xl p-3 text-xs">
@@ -344,20 +426,40 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
         </div>
       </div>
 
-      {/* Quick Action Button to see/download Blueprint */}
-      {onViewBlueprint && (
-        <div className="mt-3 pt-3 border-t border-slate-800">
+      {/* Action Buttons: PDF and Blueprint */}
+      <div className="mt-3.5 pt-3 border-t border-slate-800 flex flex-col gap-2">
+        <button
+          id="btn-generate-pdf-full"
+          type="button"
+          onClick={handleGeneratePdf}
+          disabled={isGeneratingPdf}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50"
+        >
+          {isGeneratingPdf ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Gerando Relatório Técnico em PDF...</span>
+            </>
+          ) : (
+            <>
+              <FileDown className="w-4 h-4" />
+              <span>Gerar Relatório Técnico Completo em PDF</span>
+            </>
+          )}
+        </button>
+
+        {onViewBlueprint && (
           <button
             id="btn-view-blueprint-results"
             type="button"
             onClick={onViewBlueprint}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-cyan-200 bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-700/60 rounded-lg transition-colors cursor-pointer shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-cyan-200 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors cursor-pointer"
           >
             <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
             <span>Ver Planta Baixa e Baixar Desenho Técnico</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
