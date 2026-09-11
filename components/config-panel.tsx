@@ -122,6 +122,23 @@ export function ConfigPanel({
     onChange(nextState);
   };
 
+  const hasCustomClearances = React.useMemo(() => {
+    return Boolean(
+      state.customMenorFolga !== undefined ||
+      state.customFolgaFrontal !== undefined ||
+      state.customFolgaFundo !== undefined ||
+      state.baseChassisHidraulicoL !== undefined ||
+      state.baseChassisHidraulicoSuspensao !== undefined ||
+      state.baseChassisEletricoL !== undefined ||
+      state.baseChassisEletricoSuspensaoLateral !== undefined ||
+      state.baseChassisEletricoSuspensaoFundo !== undefined ||
+      state.basePorta2FL !== undefined ||
+      state.basePorta3FL !== undefined ||
+      state.basePorta2FC !== undefined ||
+      state.basePorta4FC !== undefined
+    );
+  }, [state]);
+
   const applyPreset = (preset: ElevatorPreset) => {
     onChange({
       ...state,
@@ -177,10 +194,16 @@ export function ConfigPanel({
         
         <button
           onClick={() => setShowClearancesModal(true)}
-          title="Configurar Folgas Técnicas"
-          className="p-3 shrink-0 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors rounded-xl flex items-center justify-center"
+          title={hasCustomClearances ? "Configuração de Folgas Técnicas (Personalizadas e Salvas)" : "Configurar Folgas Técnicas (Salvas no Programa)"}
+          className="relative p-3 shrink-0 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors rounded-xl flex items-center justify-center cursor-pointer group"
         >
           <Settings2 className="w-5 h-5" />
+          {hasCustomClearances && (
+            <span
+              className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-950 shadow-sm"
+              title="Folgas personalizadas salvas e ativas no programa"
+            />
+          )}
         </button>
       </div>
 

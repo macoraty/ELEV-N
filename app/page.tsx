@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ElevatorConfigState,
   INITIAL_STATE,
   calculateElevator,
 } from '@/lib/elevator-calculator';
 import { generateElevatorPdf } from '@/lib/elevator-pdf';
+import { loadClearancesFromStorage } from '@/lib/clearances-storage';
 import { ConfigPanel } from '@/components/config-panel';
 import { ResultsPanel } from '@/components/results-panel';
 import { BlueprintCanvas } from '@/components/blueprint-canvas';
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   HelpCircle,
   Loader2,
+  Database,
 } from 'lucide-react';
 
 export default function ElevatorConfiguratorPage() {
@@ -28,8 +30,39 @@ export default function ElevatorConfiguratorPage() {
   const [configMode, setConfigMode] = useState<'cabine' | 'poco'>('cabine');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
+  // Carrega as folgas técnicas salvas no navegador pelo usuário ao iniciar o programa
+  useEffect(() => {
+    const saved = loadClearancesFromStorage();
+    if (saved) {
+      const timer = setTimeout(() => {
+        setState((prev) => ({
+          ...prev,
+          ...saved,
+        }));
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const results = useMemo(() => {
     return calculateElevator(state);
+  }, [state]);
+
+  const hasCustomClearances = useMemo(() => {
+    return Boolean(
+      state.customMenorFolga !== undefined ||
+      state.customFolgaFrontal !== undefined ||
+      state.customFolgaFundo !== undefined ||
+      state.baseChassisHidraulicoL !== undefined ||
+      state.baseChassisHidraulicoSuspensao !== undefined ||
+      state.baseChassisEletricoL !== undefined ||
+      state.baseChassisEletricoSuspensaoLateral !== undefined ||
+      state.baseChassisEletricoSuspensaoFundo !== undefined ||
+      state.basePorta2FL !== undefined ||
+      state.basePorta3FL !== undefined ||
+      state.basePorta2FC !== undefined ||
+      state.basePorta4FC !== undefined
+    );
   }, [state]);
 
   const handleGeneratePdf = async () => {
@@ -80,6 +113,16 @@ export default function ElevatorConfiguratorPage() {
 
           {/* Quick info badges */}
           <div className="flex items-center gap-3">
+            {hasCustomClearances && (
+              <div
+                className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-mono shadow-sm"
+                title="Folgas técnicas personalizadas pelo usuário salvas e ativas no programa"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-semibold">Folgas Salvas Ativas</span>
+              </div>
+            )}
+
             <div className="hidden lg:flex items-center gap-3.5 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-400">Poço:</span>
