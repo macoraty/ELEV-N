@@ -197,8 +197,12 @@ export function BlueprintCanvas({
       const cabineDrawHeight = profundidadeCabine * scale;
       const isDoorOnDepth = (state.ladoPorta || 'Largura') === 'Profundidade';
       const ladoFaceMm = isDoorOnDepth ? profundidadeCabine : larguraCabine;
+      const ladoEfetivoMm =
+        state.tipoEntrada === 'Adjacente'
+          ? Math.min(larguraCabine, profundidadeCabine)
+          : ladoFaceMm;
       const ladoFaceDraw = isDoorOnDepth ? cabineDrawHeight : cabineDrawWidth;
-      const isPortaMenor = aberturaPorta < ladoFaceMm;
+      const isPortaMenor = aberturaPorta <= ladoEfetivoMm;
 
       const doorDrawWidth = Math.min(
         aberturaPorta * scale,
@@ -1317,11 +1321,11 @@ export function BlueprintCanvas({
         tbTop + (isHighResExport ? 100 : isCompact ? 52 : 58)
       );
 
-      const montanteMm = Math.max(0, Math.round((ladoFaceMm - aberturaPorta) / 2));
+      const montanteMm = Math.max(0, Math.round((ladoEfetivoMm - aberturaPorta) / 2));
       ctx.fillStyle = isPortaMenor ? '#FFAB40' : '#EF4444';
       const pavSuffix = incluirPortaPavimento
         ? ` | P.Pav ${folgaFrontalMm}mm (${portaPavimentoMm}+${folgaEntrePortasMm})`
-        : ` | Folga ${folgaFrontalMm}mm`;
+        : ` | Folga ${folgaFrontalMm}mm (${results.folgaPortaNormalFormula})`;
       ctx.fillText(
         `PORTA: ${state.tipoPorta} (${state.aberturaPorta}mm)${pavSuffix}`,
         tbLeft + (isHighResExport ? 16 : 8),
@@ -1330,12 +1334,12 @@ export function BlueprintCanvas({
 
       ctx.fillStyle = isPortaMenor ? '#6EE7B7' : '#F87171';
       ctx.fillText(
-        `MONTANTES: 2x ${montanteMm} mm ${isPortaMenor ? '(✓ Conforme: Porta < Face)' : '(⚠️ NÃO CONFORME: Porta ≥ Face)'}`,
+        `MONTANTES: 2x ${montanteMm} mm ${isPortaMenor ? '(✓ Conforme: Porta ≤ Face)' : '(⚠️ NÃO CONFORME: Porta > Face)'}`,
         tbLeft + (isHighResExport ? 16 : 8),
         tbTop + (isHighResExport ? 148 : isCompact ? 76 : 86)
       );
 
-      // Warning alert banner on drawing if door is invalid (≥ face)
+      // Warning alert banner on drawing if door is invalid (> face)
       if (!isPortaMenor) {
         ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
         const warnW = isHighResExport ? 860 : isCompact ? 280 : 420;
@@ -1354,7 +1358,7 @@ export function BlueprintCanvas({
           : 'bold 10px system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(
-          `⚠️ ATENÇÃO: Abertura da porta (${state.aberturaPorta} mm) deve ser estritamente menor que a face da cabine (${ladoFaceMm} mm)!`,
+          `⚠️ ATENÇÃO: Abertura da porta (${state.aberturaPorta} mm) não pode ser maior que a face da cabine (${ladoEfetivoMm} mm)!`,
           isHighResExport ? 42 : 20,
           isHighResExport ? 152 : isCompact ? 89 : 91
         );
@@ -1781,7 +1785,7 @@ export function BlueprintCanvas({
               <span>
                 {results.incluirPortaPavimento
                   ? `P. Pav (${results.folgaFrontal}mm: ${results.portaPavimentoMm}+${results.folgaEntrePortasMm})`
-                  : `Porta Normal (${results.folgaFrontal}mm)`}
+                  : `Porta Normal (${results.folgaFrontal}mm: ${results.folgaPortaNormalFormula})`}
               </span>
             </div>
             <div className="flex items-center gap-1">

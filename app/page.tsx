@@ -151,7 +151,7 @@ export default function ElevatorConfiguratorPage() {
 
     let aberturaPorta = shaftConfig.aberturaPorta || maxAberturaValida;
     const parsedAbertura = parseInt(aberturaPorta, 10);
-    if (isNaN(parsedAbertura) || parsedAbertura >= ladoEfetivo) {
+    if (isNaN(parsedAbertura) || parsedAbertura > ladoEfetivo) {
       aberturaPorta = maxAberturaValida;
     }
 

@@ -350,10 +350,10 @@ export async function generateElevatorPdf({
     true
   );
   currentY = drawRow(
-    'Regra Construtiva (Porta < Lado da Cabine)',
+    'Regra Construtiva (Porta ≤ Lado da Cabine)',
     results.isPortaMenorQueLado
-      ? `CONFORME: Abertura (${state.aberturaPorta} mm) estritamente menor que a face (${results.ladoFacePortaMm} mm)`
-      : `ATENÇÃO: Abertura (${state.aberturaPorta} mm) excede ou iguala a face (${results.ladoFacePortaMm} mm)`,
+      ? `CONFORME: Abertura (${state.aberturaPorta} mm) dentro do limite da face (${results.ladoFacePortaMm} mm)`
+      : `ATENÇÃO: Abertura (${state.aberturaPorta} mm) excede a face (${results.ladoFacePortaMm} mm)`,
     currentY,
     false,
     results.isPortaMenorQueLado ? [16, 185, 129] : [220, 38, 38],
@@ -373,7 +373,7 @@ export async function generateElevatorPdf({
     'Folga de Instalação da Porta (Normal vs Pavimento)',
     results.incluirPortaPavimento
       ? `Porta de Pavimento: ${results.folgaFrontal} mm (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)`
-      : `Porta Normal: ${results.folgaFrontal} mm`,
+      : `Porta Normal (${state.tipoPorta}): ${results.folgaFrontal} mm (${results.folgaPortaNormalFormula})`,
     currentY,
     false,
     results.incluirPortaPavimento ? [217, 119, 6] : [2, 132, 199],
@@ -427,7 +427,7 @@ export async function generateElevatorPdf({
     'Folga da Porta por Acesso (Substitui Folga Normal no Lado da Porta)',
     results.incluirPortaPavimento
       ? `${results.folgaFrontal} mm (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm)`
-      : `${results.folgaFrontal} mm (Porta Normal)`,
+      : `${results.folgaFrontal} mm (${state.tipoPorta}: ${results.folgaPortaNormalFormula})`,
     currentY,
     results.isCalculadoPorPoco ? true : false
   );

@@ -20,7 +20,7 @@ import {
   LADOS_INSTALACAO_PORTA,
   ABERTURAS_PORTA,
   getMaiorAberturaValida,
-  DEFAULT_FOLGA_PORTA_NORMAL_MM,
+  getFolgaPortaNormalPorTipo,
   DEFAULT_PORTA_PAVIMENTO_MM,
   DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
@@ -40,6 +40,7 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  Lock,
 } from 'lucide-react';
 
 export interface ShaftCalculatorProps {
@@ -77,7 +78,10 @@ export function ShaftCalculator({
   }
 
   const incluirPortaPavimento = shaftConfig.incluirPortaPavimento ?? false;
-  const folgaPortaNormalMm = customClearances?.customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaNormalInfo = getFolgaPortaNormalPorTipo(shaftConfig.tipoPorta);
+  const folgaPortaNormalMm = customClearances?.customFolgaFrontal ?? portaNormalInfo.totalMm;
+  const folgaPortaNormalFormula =
+    customClearances?.customFolgaFrontal !== undefined ? 'custom' : portaNormalInfo.formula;
   const portaPavimentoMm = customClearances?.customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
   const folgaEntrePortasMm = customClearances?.customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
   const folgaPortaPavMm = portaPavimentoMm + folgaEntrePortasMm;
@@ -134,7 +138,7 @@ export function ShaftCalculator({
   const currentAbertura = useMemo(() => {
     if (shaftConfig.aberturaPorta) {
       const parsed = parseInt(shaftConfig.aberturaPorta, 10);
-      if (!isNaN(parsed) && parsed < ladoEfetivo) {
+      if (!isNaN(parsed) && parsed <= ladoEfetivo) {
         return shaftConfig.aberturaPorta;
       }
     }
@@ -167,7 +171,7 @@ export function ShaftCalculator({
 
     let newAbertura = shaftConfig.aberturaPorta || currentAbertura;
     const parsed = parseInt(newAbertura, 10);
-    if (isNaN(parsed) || parsed >= cabinLadoEfetivo) {
+    if (isNaN(parsed) || parsed > cabinLadoEfetivo) {
       newAbertura = cabin.maxAberturaPorta || getMaiorAberturaValida(cabinLadoEfetivo);
     }
 
@@ -192,7 +196,7 @@ export function ShaftCalculator({
           ? Math.min(maxCab.larguraCabine, maxCab.profundidadeCabine)
           : maxFace;
       const parsed = parseInt(newAbertura, 10);
-      if (isNaN(parsed) || parsed >= maxLadoEfetivo) {
+      if (isNaN(parsed) || parsed > maxLadoEfetivo) {
         newAbertura = maxCab.maxAberturaPorta || getMaiorAberturaValida(maxLadoEfetivo);
       }
     }
@@ -368,7 +372,7 @@ export function ShaftCalculator({
               >
                 {ABERTURAS_PORTA.map((abertura) => {
                   const val = parseInt(abertura, 10);
-                  const fits = val < ladoEfetivo;
+                  const fits = val <= ladoEfetivo;
                   const sobra = ladoEfetivo - val;
                   const mont = Math.max(0, Math.round(sobra / 2));
                   return (
@@ -385,7 +389,7 @@ export function ShaftCalculator({
 
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
               {ABERTURAS_PORTA.filter(
-                (a) => parseInt(a, 10) < ladoEfetivo && parseInt(a, 10) >= 600 && parseInt(a, 10) <= 1000
+                (a) => parseInt(a, 10) <= ladoEfetivo && parseInt(a, 10) >= 600 && parseInt(a, 10) <= 1200
               ).map((a) => (
                 <button
                   key={a}
@@ -565,25 +569,48 @@ export function ShaftCalculator({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {/* Modelo de Porta */}
             <div>
-              <label htmlFor="select-shaft-tipo-porta" className="block text-[10px] text-slate-400 font-medium mb-0.5">
-                Modelo da Porta
+              <label
+                htmlFor="select-shaft-tipo-porta"
+                className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-0.5"
+              >
+                <span>Modelo da Porta</span>
+                {incluirPortaPavimento && (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-400">
+                    <Lock className="w-2.5 h-2.5" />
+                    Bloqueado
+                  </span>
+                )}
               </label>
               <select
                 id="select-shaft-tipo-porta"
                 value={shaftConfig.tipoPorta}
+                disabled={incluirPortaPavimento}
                 onChange={(e) =>
                   onChange({
                     ...shaftConfig,
                     tipoPorta: e.target.value as TipoPorta,
+                    selectedCabinKey: null,
                   })
                 }
-                className="w-full bg-slate-950 border border-slate-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-sky-500 cursor-pointer"
+                title={
+                  incluirPortaPavimento
+                    ? 'Escolha bloqueada enquanto Porta de Pavimento estiver selecionada'
+                    : undefined
+                }
+                className={`w-full border rounded px-2 py-1 text-xs focus:outline-none transition-colors ${
+                  incluirPortaPavimento
+                    ? 'bg-slate-900/70 border-slate-800 text-slate-500 cursor-not-allowed opacity-70'
+                    : 'bg-slate-950 border-slate-700 text-white focus:border-sky-500 cursor-pointer'
+                }`}
               >
-                {TIPOS_PORTA.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {TIPOS_PORTA.map((t) => {
+                  const info = getFolgaPortaNormalPorTipo(t);
+                  return (
+                    <option key={t} value={t}>
+                      {t} ({info.totalMm} mm)
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -599,7 +626,7 @@ export function ShaftCalculator({
                     const newLado = 'Largura';
                     const newLadoEfetivo = shaftConfig.tipoEntrada === 'Adjacente' ? Math.min(activeLargura, activeProfundidade) : activeLargura;
                     let newAbertura = shaftConfig.aberturaPorta;
-                    if (!newAbertura || parseInt(newAbertura, 10) >= newLadoEfetivo) {
+                    if (!newAbertura || parseInt(newAbertura, 10) > newLadoEfetivo) {
                       newAbertura = getMaiorAberturaValida(newLadoEfetivo);
                     }
                     onChange({ ...shaftConfig, ladoPorta: newLado, aberturaPorta: newAbertura });
@@ -618,7 +645,7 @@ export function ShaftCalculator({
                     const newLado = 'Profundidade';
                     const newLadoEfetivo = shaftConfig.tipoEntrada === 'Adjacente' ? Math.min(activeLargura, activeProfundidade) : activeProfundidade;
                     let newAbertura = shaftConfig.aberturaPorta;
-                    if (!newAbertura || parseInt(newAbertura, 10) >= newLadoEfetivo) {
+                    if (!newAbertura || parseInt(newAbertura, 10) > newLadoEfetivo) {
                       newAbertura = getMaiorAberturaValida(newLadoEfetivo);
                     }
                     onChange({ ...shaftConfig, ladoPorta: newLado, aberturaPorta: newAbertura });
@@ -647,7 +674,7 @@ export function ShaftCalculator({
                     onClick={() => {
                       const newLadoEfetivo = t === 'Adjacente' ? Math.min(activeLargura, activeProfundidade) : activeFaceMm;
                       let newAbertura = shaftConfig.aberturaPorta;
-                      if (!newAbertura || parseInt(newAbertura, 10) >= newLadoEfetivo) {
+                      if (!newAbertura || parseInt(newAbertura, 10) > newLadoEfetivo) {
                         newAbertura = getMaiorAberturaValida(newLadoEfetivo);
                       }
                       onChange({ ...shaftConfig, tipoEntrada: t, aberturaPorta: newAbertura });
@@ -670,7 +697,7 @@ export function ShaftCalculator({
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
               <span>Folga da Porta no Poço</span>
               <span className="font-mono text-amber-400">
-                Ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm`}
+                Ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm (${folgaPortaNormalFormula})`}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -695,7 +722,7 @@ export function ShaftCalculator({
                   {!incluirPortaPavimento && <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
-                  Folga: {folgaPortaNormalMm} mm
+                  Folga: {folgaPortaNormalMm} mm ({folgaPortaNormalFormula})
                 </div>
               </button>
 

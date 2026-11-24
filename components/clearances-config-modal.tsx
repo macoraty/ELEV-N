@@ -3,7 +3,7 @@ import { X, Save, RotateCcw, Settings2, DoorOpen, Check, AlertTriangle, Database
 import {
   ElevatorConfigState,
   ABERTURAS_PORTA,
-  DEFAULT_FOLGA_PORTA_NORMAL_MM,
+  getFolgaPortaNormalPorTipo,
   DEFAULT_PORTA_PAVIMENTO_MM,
   DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
@@ -259,10 +259,11 @@ export function ClearancesConfigModal({
   const profundidadeNum = parseInt(state.profundidadeCabine, 10) || 1250;
   const ladoFace = ladoInstalacao === 'Largura' ? larguraNum : profundidadeNum;
   const ladoEfetivo = state.tipoEntrada === 'Adjacente' ? Math.min(larguraNum, profundidadeNum) : ladoFace;
-  const isPortaMaiorQueCabine = aberturaMm >= ladoEfetivo;
+  const isPortaMaiorQueCabine = aberturaMm > ladoEfetivo;
 
   const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
-  const folgaPortaNormalMm = state.customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaNormalInfo = getFolgaPortaNormalPorTipo(state.tipoPorta);
+  const folgaPortaNormalMm = state.customFolgaFrontal ?? portaNormalInfo.totalMm;
   const portaPavimentoMm = state.customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
   const folgaEntrePortasMm = state.customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
   const folgaPortaPavMm = portaPavimentoMm + folgaEntrePortasMm;
@@ -459,7 +460,7 @@ export function ClearancesConfigModal({
                   {isPortaMaiorQueCabine ? (
                     <div className="flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/50 px-2.5 py-1 rounded">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      <span>Abertura ({aberturaMm}mm) ≥ face da cabine ({ladoEfetivo}mm).</span>
+                      <span>Abertura ({aberturaMm}mm) &gt; face da cabine ({ladoEfetivo}mm).</span>
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
@@ -512,11 +513,15 @@ export function ClearancesConfigModal({
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {renderInput('Menor Folga Lateral', 'customMenorFolga', 125)}
-                  {renderInput('Folga Porta Normal (mm)', 'customFolgaFrontal', DEFAULT_FOLGA_PORTA_NORMAL_MM)}
+                  {renderInput(
+                    `Folga Porta Normal (${state.tipoPorta}: ${portaNormalInfo.formula})`,
+                    'customFolgaFrontal',
+                    portaNormalInfo.totalMm
+                  )}
                   {renderInput('Folga de Fundo', 'customFolgaFundo', 120)}
                 </div>
 
-                {/* Sub-card: Porta de Pavimento (90 + 30 = 120 mm no lugar de 210 mm) */}
+                {/* Sub-card: Porta de Pavimento (90 + 30 = 120 mm no lugar da porta normal) */}
                 <div className="mt-2.5 bg-slate-950/80 border border-amber-500/40 rounded-xl p-3 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <button
@@ -532,13 +537,13 @@ export function ClearancesConfigModal({
                         <span className="w-3.5 h-3.5 rounded-full bg-white shadow" />
                       </div>
                       <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
-                        Usar Porta de Pavimento (120 mm no lugar de 210 mm)
+                        Usar Porta de Pavimento ({folgaPortaPavMm} mm no lugar de {folgaPortaNormalMm} mm)
                       </span>
                     </button>
                     <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-950/70 border border-amber-500/40 text-amber-200">
                       {incluirPortaPavimento
                         ? `Ativa: ${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})`
-                        : `Porta Normal: ${folgaPortaNormalMm} mm`}
+                        : `Porta Normal: ${folgaPortaNormalMm} mm (${state.customFolgaFrontal !== undefined ? 'custom' : portaNormalInfo.formula})`}
                     </span>
                   </div>
 

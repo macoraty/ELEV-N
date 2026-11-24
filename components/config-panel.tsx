@@ -18,13 +18,11 @@ import {
   LADOS_ARCADA,
   LADOS_INSTALACAO_PORTA,
   ABERTURAS_PORTA,
-  ELEVATOR_PRESETS,
-  ElevatorPreset,
   getMaiorAberturaValida,
   calculateShaftClearances,
+  getFolgaPortaNormalPorTipo,
   ShaftConfigState,
   INITIAL_SHAFT_STATE,
-  DEFAULT_FOLGA_PORTA_NORMAL_MM,
   DEFAULT_PORTA_PAVIMENTO_MM,
   DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
@@ -34,12 +32,12 @@ import {
   DoorOpen,
   Zap,
   Layers,
-  Sparkles,
   HelpCircle,
   AlertTriangle,
   CheckCircle2,
   ArrowRightLeft,
   Building2,
+  Lock,
 } from 'lucide-react';
 import { ShaftCalculator } from './shaft-calculator';
 import { ClearancesConfigModal } from './clearances-config-modal';
@@ -79,6 +77,7 @@ export function ConfigPanel({
       arcada: state.arcada,
       ladoArcada: state.ladoArcada,
       tipoEntrada: state.tipoEntrada,
+      tipoPorta: state.tipoPorta,
       ladoPorta: state.ladoPorta,
       incluirPortaPavimento: state.incluirPortaPavimento,
       customPortaPavimento: state.customPortaPavimento,
@@ -89,6 +88,7 @@ export function ConfigPanel({
     state.arcada,
     state.ladoArcada,
     state.tipoEntrada,
+    state.tipoPorta,
     state.ladoPorta,
     state.incluirPortaPavimento,
     state.customPortaPavimento,
@@ -96,7 +96,10 @@ export function ConfigPanel({
   ]);
 
   const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
-  const folgaPortaNormalMm = state.customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaNormalInfo = getFolgaPortaNormalPorTipo(state.tipoPorta);
+  const folgaPortaNormalMm = state.customFolgaFrontal ?? portaNormalInfo.totalMm;
+  const folgaPortaNormalFormula =
+    state.customFolgaFrontal !== undefined ? 'custom' : portaNormalInfo.formula;
   const portaPavimentoMm = state.customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
   const folgaEntrePortasMm = state.customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
   const folgaPortaPavMm = portaPavimentoMm + folgaEntrePortasMm;
@@ -112,7 +115,7 @@ export function ConfigPanel({
       : ladoFacePorta;
 
   const aberturaNum = parseInt(state.aberturaPorta, 10) || 700;
-  const isPortaValida = aberturaNum < ladoEfetivo;
+  const isPortaValida = aberturaNum <= ladoEfetivo;
   const diferencaMm = ladoEfetivo - aberturaNum;
   const montanteMm = Math.max(0, Math.round(diferencaMm / 2));
   const maxAberturaSugerida = getMaiorAberturaValida(ladoEfetivo);
@@ -127,7 +130,7 @@ export function ConfigPanel({
     };
 
     // Se alterou largura, profundidade, tipo de entrada ou lado da porta,
-    // verifica se a porta atual ainda é estritamente menor que o lado da cabine.
+    // verifica se a porta atual ainda cabe no limite da face da cabine (porta <= face).
     if (
       field === 'larguraCabine' ||
       field === 'profundidadeCabine' ||
@@ -141,7 +144,7 @@ export function ConfigPanel({
         nextState.tipoEntrada === 'Adjacente' ? Math.min(nextLargura, nextProf) : nextLado;
       const nextAbertura = parseInt(nextState.aberturaPorta, 10) || 700;
 
-      if (nextAbertura >= nextLadoEfetivo) {
+      if (nextAbertura > nextLadoEfetivo) {
         nextState.aberturaPorta = getMaiorAberturaValida(nextLadoEfetivo);
       }
     }
@@ -167,19 +170,6 @@ export function ConfigPanel({
       state.basePorta4FC !== undefined
     );
   }, [state]);
-
-  const applyPreset = (preset: ElevatorPreset) => {
-    onChange({
-      ...state,
-      larguraCabine: preset.largura,
-      profundidadeCabine: preset.profundidade,
-      ladoPorta: preset.ladoPorta || 'Largura',
-      aberturaPorta: preset.aberturaPorta,
-      acionamento: preset.acionamento,
-      arcada: preset.arcada,
-      tipoPorta: preset.tipoPorta,
-    });
-  };
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -246,53 +236,7 @@ export function ConfigPanel({
         />
       ) : (
         <>
-          {/* Quick Presets selector */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <h3 className="text-[11px] font-bold text-slate-200 uppercase tracking-wider">
-                  Modelos Padrão / Presets Rápidos
-                </h3>
-              </div>
-              <span className="text-[10px] text-slate-400 font-mono">NBR NM 207 / NM 313</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {ELEVATOR_PRESETS.map((preset) => {
-                const isSelected =
-                  state.larguraCabine === preset.largura &&
-                  state.profundidadeCabine === preset.profundidade &&
-                  state.aberturaPorta === preset.aberturaPorta &&
-                  state.acionamento === preset.acionamento &&
-                  state.arcada === preset.arcada &&
-                  state.tipoPorta === preset.tipoPorta;
-
-                return (
-                  <button
-                    key={preset.id}
-                    id={`preset-${preset.id}`}
-                    type="button"
-                    onClick={() => applyPreset(preset)}
-                    className={`flex flex-col items-start p-2 rounded-lg border text-left transition-all ${
-                      isSelected
-                        ? 'border-cyan-500 bg-cyan-950/40 text-cyan-200 shadow-sm shadow-cyan-900/30'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <span className="text-[11px] font-semibold leading-snug line-clamp-1">
-                      {preset.nome}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">
-                      {preset.largura}×{preset.profundidade} mm
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-      {/* Dimensões da Cabine Card */}
+          {/* Dimensões da Cabine Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
         <div className="flex items-center gap-1.5 pb-2 mb-2.5 border-b border-slate-800">
           <div className="p-1 rounded bg-cyan-950/70 border border-cyan-800/50 text-cyan-400">
@@ -443,7 +387,7 @@ export function ConfigPanel({
           >
             {ABERTURAS_PORTA.map((abertura) => {
               const valor = parseInt(abertura, 10);
-              const isMenor = valor < ladoEfetivo;
+              const isMenor = valor <= ladoEfetivo;
               const sobra = ladoEfetivo - valor;
               const montante = Math.max(0, Math.round(sobra / 2));
 
@@ -456,7 +400,7 @@ export function ConfigPanel({
                 >
                   {isMenor
                     ? `${abertura} mm — Montantes: 2x ${montante} mm ${abertura === '800' ? '(Padrão)' : abertura === '900' ? '(Acessib.)' : ''}`
-                    : `${abertura} mm — (Inválido: ≥ ${ladoEfetivo} mm do lado da cabine)`}
+                    : `${abertura} mm — (Inválido: > ${ladoEfetivo} mm do lado da cabine)`}
                 </option>
               );
             })}
@@ -468,7 +412,7 @@ export function ConfigPanel({
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <div className="font-semibold text-emerald-300 text-[11px]">
-                  Porta em conformidade: {aberturaNum} mm &lt; {ladoEfetivo} mm (face da cabine)
+                  Porta em conformidade: {aberturaNum} mm &le; {ladoEfetivo} mm (face da cabine)
                 </div>
                 <p className="text-slate-300 text-[10px] mt-0.5">
                   Montantes frontais:{' '}
@@ -482,7 +426,7 @@ export function ConfigPanel({
               <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="font-bold text-rose-200 text-[11px]">
-                  Abertura inválida: a porta não pode ser igual ou maior que a face da cabine!
+                  Abertura inválida: a porta não pode ser maior que a face da cabine!
                 </div>
                 <button
                   type="button"
@@ -501,7 +445,7 @@ export function ConfigPanel({
             <div className="flex items-center justify-between text-[11px] font-medium text-slate-300 mb-1.5">
               <span>Tipo de Instalação / Folga da Porta</span>
               <span className="text-[10px] font-mono text-amber-400">
-                Folga ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm`}
+                Folga ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm (${folgaPortaNormalFormula})`}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -522,7 +466,7 @@ export function ConfigPanel({
                   )}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  Folga da porta: {folgaPortaNormalMm} mm
+                  Folga: {folgaPortaNormalMm} mm ({folgaPortaNormalFormula})
                 </div>
               </button>
 
@@ -636,22 +580,46 @@ export function ConfigPanel({
           <div>
             <label
               htmlFor="select-tipo-porta"
-              className="block text-[11px] font-medium text-slate-300 mb-1"
+              className="flex items-center justify-between text-[11px] font-medium text-slate-300 mb-1"
             >
-              Tipo de Porta
+              <span>Tipo de Porta</span>
+              {incluirPortaPavimento && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400">
+                  <Lock className="w-3 h-3" />
+                  Bloqueado
+                </span>
+              )}
             </label>
             <select
               id="select-tipo-porta"
               value={state.tipoPorta}
+              disabled={incluirPortaPavimento}
               onChange={(e) => updateField('tipoPorta', e.target.value as TipoPorta)}
-              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 focus:border-cyan-400 rounded-lg text-xs text-slate-100 transition-colors"
+              title={
+                incluirPortaPavimento
+                  ? 'Escolha bloqueada enquanto Porta de Pavimento estiver selecionada'
+                  : undefined
+              }
+              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs transition-colors ${
+                incluirPortaPavimento
+                  ? 'bg-slate-900/70 border-slate-800 text-slate-500 cursor-not-allowed opacity-70'
+                  : 'bg-slate-950 border-slate-700 focus:border-cyan-400 text-slate-100'
+              }`}
             >
-              {TIPOS_PORTA.map((op) => (
-                <option key={op} value={op}>
-                  {op}
-                </option>
-              ))}
+              {TIPOS_PORTA.map((op) => {
+                const info = getFolgaPortaNormalPorTipo(op);
+                return (
+                  <option key={op} value={op}>
+                    {op} ({info.totalMm} mm — {info.formula})
+                  </option>
+                );
+              })}
             </select>
+            {incluirPortaPavimento && (
+              <p className="text-[10px] text-amber-400/90 mt-1">
+                Bloqueado com Porta de Pavimento ativa.
+              </p>
+            )}
           </div>
 
           {/* Tipo de Entrada */}

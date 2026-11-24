@@ -38,6 +38,52 @@ export const DEFAULT_FOLGA_PORTA_NORMAL_MM = 210;
 export const DEFAULT_PORTA_PAVIMENTO_MM = 90;
 export const DEFAULT_FOLGA_ENTRE_PORTAS_MM = 30;
 
+export interface DoorClearanceBreakdown {
+  folhaCabineMm: number;
+  folgaEntrePortasMm: number;
+  folhaPavimentoMm: number;
+  totalMm: number;
+  formula: string;
+}
+
+export const FOLGA_PORTA_NORMAL_POR_TIPO: Record<TipoPorta, DoorClearanceBreakdown> = {
+  '2 Folhas Lateral': {
+    folhaCabineMm: 90,
+    folgaEntrePortasMm: 30,
+    folhaPavimentoMm: 90,
+    totalMm: 210,
+    formula: '90+30+90',
+  },
+  '3 Folhas Lateral': {
+    folhaCabineMm: 136,
+    folgaEntrePortasMm: 30,
+    folhaPavimentoMm: 136,
+    totalMm: 302,
+    formula: '136+30+136',
+  },
+  '2 Folhas Central': {
+    folhaCabineMm: 75,
+    folgaEntrePortasMm: 30,
+    folhaPavimentoMm: 75,
+    totalMm: 180,
+    formula: '75+30+75',
+  },
+  '4 Folhas Central': {
+    folhaCabineMm: 90,
+    folgaEntrePortasMm: 30,
+    folhaPavimentoMm: 90,
+    totalMm: 210,
+    formula: '90+30+90',
+  },
+};
+
+export function getFolgaPortaNormalPorTipo(tipoPorta?: TipoPorta): DoorClearanceBreakdown {
+  if (tipoPorta && FOLGA_PORTA_NORMAL_POR_TIPO[tipoPorta]) {
+    return FOLGA_PORTA_NORMAL_POR_TIPO[tipoPorta];
+  }
+  return FOLGA_PORTA_NORMAL_POR_TIPO['2 Folhas Lateral'];
+}
+
 export interface ElevatorConfigState {
   larguraCabine: string;
   profundidadeCabine: string;
@@ -119,6 +165,7 @@ export interface ElevatorCalculationResults {
   menorFolga: number;
   folgaFrontal: number;
   folgaFrontalBase: number;
+  folgaPortaNormalFormula: string;
   folgaEsquerda: number;
   folgaDireita: number;
   folgaFrontalParede: number;
@@ -371,16 +418,16 @@ export const ELEVATOR_PRESETS: ElevatorPreset[] = [
 ];
 
 /**
- * Retorna a maior abertura padronizada que seja estritamente menor que o lado da cabine.
- * Faixa técnica padrão: de 100 em 100 mm, começando em 700 mm até 1200 mm.
+ * Retorna a maior abertura padronizada que seja menor ou igual ao lado da cabine.
+ * Faixa técnica padrão: de 500 mm até 1200 mm.
  */
 export function getMaiorAberturaValida(ladoMm: number): string {
   const aberturasNumericas = [500, 600, 650, 700, 800, 900, 1000, 1100, 1200];
-  const validas = aberturasNumericas.filter((a) => a < ladoMm);
+  const validas = aberturasNumericas.filter((a) => a <= ladoMm);
   if (validas.length > 0) {
     return String(validas[validas.length - 1]);
   }
-  const menorAbertura = Math.max(400, Math.floor((ladoMm - 100) / 50) * 50);
+  const menorAbertura = Math.max(400, Math.floor(ladoMm / 50) * 50);
   return String(menorAbertura);
 }
 
@@ -426,6 +473,7 @@ export function calculateElevator(
     arcada: state.arcada,
     ladoArcada: state.ladoArcada,
     tipoEntrada: state.tipoEntrada,
+    tipoPorta: state.tipoPorta,
     ladoPorta: ladoInstalacao,
     incluirPortaPavimento,
     customMenorFolga: state.customMenorFolga,
@@ -445,6 +493,7 @@ export function calculateElevator(
     menorFolga,
     folgaFrontal,
     folgaFrontalBase,
+    folgaPortaNormalFormula,
     folgaEsquerda,
     folgaDireita,
     folgaFrontalParede,
@@ -478,7 +527,7 @@ export function calculateElevator(
   const numeroPassageiros = calcularPassageirosNBR(areaCabineM2);
   const cargaNBR = calcularCargaUtilNBR(areaCabineM2, numeroPassageiros);
 
-  // Validação: A porta SEMPRE tem que ser menor que o lado da cabine onde ela vai instalada
+  // Validação: O limite da porta é igual à largura da face da cabine onde ela vai instalada (porta <= face)
   const ladoFacePortaMm = ladoInstalacao === 'Profundidade' ? profundidade : largura;
   const nomeLadoPorta =
     ladoInstalacao === 'Profundidade'
@@ -492,13 +541,13 @@ export function calculateElevator(
       : ladoFacePortaMm;
 
   const aberturaNum = parseInt(state.aberturaPorta, 10) || 700;
-  const isPortaMenorQueLado = aberturaNum < ladoEfetivoPortaMm;
+  const isPortaMenorQueLado = aberturaNum <= ladoEfetivoPortaMm;
   const diferencaPortaLadoMm = ladoEfetivoPortaMm - aberturaNum;
   const montanteFrontalMm = Math.max(0, Math.round(diferencaPortaLadoMm / 2));
   const maxAberturaSugeridaMm = parseInt(getMaiorAberturaValida(ladoEfetivoPortaMm), 10);
 
   const erroValidacaoPorta = !isPortaMenorQueLado
-    ? `A porta (${aberturaNum} mm) deve ser estritamente menor que a face da cabine (${ladoEfetivoPortaMm} mm). É necessário espaço para os montantes estruturais e marcos de cabine.`
+    ? `A porta (${aberturaNum} mm) excede o limite da face da cabine (${ladoEfetivoPortaMm} mm). A abertura máxima permitida é de até ${ladoEfetivoPortaMm} mm.`
     : undefined;
 
   return {
@@ -516,6 +565,7 @@ export function calculateElevator(
     menorFolga,
     folgaFrontal,
     folgaFrontalBase,
+    folgaPortaNormalFormula,
     folgaEsquerda,
     folgaDireita,
     folgaFrontalParede,
@@ -603,6 +653,7 @@ export interface ShaftToCabinsResult {
   espacoChassis: number;
   menorFolga: number;
   folgaFrontal: number;
+  folgaPortaNormalFormula: string;
   folgaFundoPadrao: number;
   incluirPortaPavimento: boolean;
   portaPavimentoMm: number;
@@ -619,6 +670,7 @@ export function calculateShaftClearances({
   arcada = 'L',
   ladoArcada = 'Lateral',
   tipoEntrada = 'Unilateral',
+  tipoPorta = '2 Folhas Lateral',
   ladoPorta = 'Largura',
   incluirPortaPavimento = false,
   customMenorFolga,
@@ -636,6 +688,7 @@ export function calculateShaftClearances({
   arcada?: Arcada;
   ladoArcada?: LadoArcada;
   tipoEntrada?: TipoEntrada;
+  tipoPorta?: TipoPorta;
   ladoPorta?: LadoInstalacaoPorta;
   incluirPortaPavimento?: boolean;
   customMenorFolga?: number;
@@ -663,7 +716,10 @@ export function calculateShaftClearances({
   }
 
   const menorFolga = customMenorFolga ?? 125;
-  const folgaFrontalBase = customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaNormalBreakdown = getFolgaPortaNormalPorTipo(tipoPorta);
+  const folgaFrontalBase = customFolgaFrontal ?? portaNormalBreakdown.totalMm;
+  const folgaPortaNormalFormula =
+    customFolgaFrontal !== undefined ? `${customFolgaFrontal} mm` : portaNormalBreakdown.formula;
   const folgaFundoPadrao = customFolgaFundo ?? 120;
 
   const portaPavimentoMm = customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
@@ -712,6 +768,7 @@ export function calculateShaftClearances({
     menorFolga,
     folgaFrontal,
     folgaFrontalBase,
+    folgaPortaNormalFormula,
     folgaFundoPadrao,
     folgaEsquerda,
     folgaDireita,
@@ -749,6 +806,7 @@ export function calculatePossibleCabinsFromShaft(
   const arcada = input.arcada || 'L';
   const ladoArcada = input.ladoArcada || 'Lateral';
   const tipoEntrada = input.tipoEntrada || 'Unilateral';
+  const tipoPorta = input.tipoPorta || '2 Folhas Lateral';
   const ladoPorta = input.ladoPorta || 'Largura';
   const incluirPortaPavimento = input.incluirPortaPavimento ?? false;
 
@@ -757,6 +815,7 @@ export function calculatePossibleCabinsFromShaft(
     arcada,
     ladoArcada,
     tipoEntrada,
+    tipoPorta,
     ladoPorta,
     incluirPortaPavimento,
     customMenorFolga: input.customMenorFolga,
@@ -953,6 +1012,7 @@ export function calculatePossibleCabinsFromShaft(
     espacoChassis: clearances.espacoChassis,
     menorFolga: clearances.menorFolga,
     folgaFrontal: clearances.folgaFrontal,
+    folgaPortaNormalFormula: clearances.folgaPortaNormalFormula,
     folgaFundoPadrao: clearances.folgaFundoPadrao,
     incluirPortaPavimento: clearances.incluirPortaPavimento,
     portaPavimentoMm: clearances.portaPavimentoMm,

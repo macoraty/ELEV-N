@@ -84,9 +84,9 @@ DIMENSÕES DA CABINE E PORTA:
 - Profundidade da Cabine: ${state.profundidadeCabine} mm
 - Lado de Instalação da Porta: ${results.nomeLadoPorta}
 - Vão Livre da Porta: ${state.aberturaPorta} mm
-- Tipo de Folga da Porta: ${results.incluirPortaPavimento ? `Porta de Pavimento (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} = ${results.folgaFrontal} mm no lugar de ${results.folgaFrontalBase} mm)` : `Porta Normal (${results.folgaFrontal} mm)`}
+- Tipo de Folga da Porta: ${results.incluirPortaPavimento ? `Porta de Pavimento (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} = ${results.folgaFrontal} mm no lugar de ${results.folgaFrontalBase} mm)` : `Porta Normal — ${state.tipoPorta} (${results.folgaPortaNormalFormula} = ${results.folgaFrontal} mm)`}
 - Espaço para Montantes Frontais: 2x ${results.montanteFrontalMm} mm (Total: ${results.diferencaPortaLadoMm} mm)
-- Validação Porta x Cabine: ${results.isPortaMenorQueLado ? 'CONFORME (Porta estritamente menor que a face da cabine)' : 'INCONSISTENTE (Porta >= face)'}
+- Validação Porta x Cabine: ${results.isPortaMenorQueLado ? 'CONFORME (Porta ≤ face da cabine)' : 'INCONSISTENTE (Porta > face)'}
 
 DIMENSIONAMENTO DO POÇO (CAIXA DE CORRIDA):
 - LARGURA DO POÇO (LP): ${results.larguraPoco} mm
@@ -101,7 +101,7 @@ CONFIGURAÇÃO TÉCNICA:
 - Lado da Arcada / Chassis: ${state.ladoArcada}
 
 FOLGAS E SUPORTES ESTRUTURAIS:
-- Folga da Porta (Por Acesso): ${results.folgaFrontal} mm${results.incluirPortaPavimento ? ` (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)` : ' (Porta Normal)'}
+- Folga da Porta (Por Acesso): ${results.folgaFrontal} mm${results.incluirPortaPavimento ? ` (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)` : ` (Porta Normal — ${state.tipoPorta}: ${results.folgaPortaNormalFormula})`}
 - Folgas por Parede do Poço: Frontal ${results.folgaFrontalParede} mm${results.hasFrontDoor ? ' [Porta]' : ''} | Fundo ${results.folgaFundoParede} mm${results.hasRearDoor ? ' [Porta]' : ''} | Esq. ${results.folgaEsquerda} mm${results.hasLeftDoor ? ' [Porta]' : ''} | Dir. ${results.folgaDireita} mm${results.hasRightDoor ? ' [Porta]' : ''}
 - Folga Necessária (Recolhimento): ${results.folgaPorta} mm
 - Espaço Chassis (L/S): ${results.espacoChassis} mm
@@ -400,15 +400,15 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
             >
               {results.incluirPortaPavimento
                 ? `Porta de Pavimento: ${results.folgaFrontal} mm (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm})`
-                : `Porta Normal: ${results.folgaFrontal} mm`}
+                : `Porta Normal: ${results.folgaFrontal} mm (${results.folgaPortaNormalFormula})`}
             </span>
           </div>
           <div className="flex items-center justify-between py-0.5">
             <span className="text-slate-400">Regra Construtiva</span>
             <span className="text-slate-300">
               {results.isPortaMenorQueLado
-                ? `Porta (${state.aberturaPorta} mm) < Face (${results.ladoFacePortaMm} mm)`
-                : `ERRO: Porta (${state.aberturaPorta} mm) ≥ Face (${results.ladoFacePortaMm} mm)`}
+                ? `Porta (${state.aberturaPorta} mm) ≤ Face (${results.ladoFacePortaMm} mm)`
+                : `ERRO: Porta (${state.aberturaPorta} mm) > Face (${results.ladoFacePortaMm} mm)`}
             </span>
           </div>
         </div>
