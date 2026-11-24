@@ -55,6 +55,12 @@ export default function ElevatorConfiguratorPage() {
           ...prev,
           ...saved,
         }));
+        if (saved.incluirPortaPavimento !== undefined) {
+          setShaftConfig((prev) => ({
+            ...prev,
+            incluirPortaPavimento: saved.incluirPortaPavimento,
+          }));
+        }
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -92,9 +98,12 @@ export default function ElevatorConfiguratorPage() {
       tipoEntrada: shaftConfig.tipoEntrada,
       tipoPorta: shaftConfig.tipoPorta,
       ladoPorta: shaftConfig.ladoPorta,
+      incluirPortaPavimento: shaftConfig.incluirPortaPavimento,
       customMenorFolga: cabinState.customMenorFolga,
       customFolgaFrontal: cabinState.customFolgaFrontal,
       customFolgaFundo: cabinState.customFolgaFundo,
+      customPortaPavimento: cabinState.customPortaPavimento,
+      customFolgaEntrePortas: cabinState.customFolgaEntrePortas,
       baseChassisHidraulicoL: cabinState.baseChassisHidraulicoL,
       baseChassisHidraulicoSuspensao: cabinState.baseChassisHidraulicoSuspensao,
       baseChassisEletricoL: cabinState.baseChassisEletricoL,
@@ -106,6 +115,8 @@ export default function ElevatorConfiguratorPage() {
     cabinState.customMenorFolga,
     cabinState.customFolgaFrontal,
     cabinState.customFolgaFundo,
+    cabinState.customPortaPavimento,
+    cabinState.customFolgaEntrePortas,
     cabinState.baseChassisHidraulicoL,
     cabinState.baseChassisHidraulicoSuspensao,
     cabinState.baseChassisEletricoL,
@@ -155,10 +166,13 @@ export default function ElevatorConfiguratorPage() {
       tipoPorta: shaftConfig.tipoPorta,
       tipoEntrada: shaftConfig.tipoEntrada,
       ladoArcada: shaftConfig.ladoArcada,
+      incluirPortaPavimento: shaftConfig.incluirPortaPavimento,
       // Preserva folgas personalizadas salvas
       customMenorFolga: cabinState.customMenorFolga,
       customFolgaFrontal: cabinState.customFolgaFrontal,
       customFolgaFundo: cabinState.customFolgaFundo,
+      customPortaPavimento: cabinState.customPortaPavimento,
+      customFolgaEntrePortas: cabinState.customFolgaEntrePortas,
       baseChassisHidraulicoL: cabinState.baseChassisHidraulicoL,
       baseChassisHidraulicoSuspensao: cabinState.baseChassisHidraulicoSuspensao,
       baseChassisEletricoL: cabinState.baseChassisEletricoL,
@@ -189,6 +203,8 @@ export default function ElevatorConfiguratorPage() {
       cabinState.customMenorFolga !== undefined ||
       cabinState.customFolgaFrontal !== undefined ||
       cabinState.customFolgaFundo !== undefined ||
+      cabinState.customPortaPavimento !== undefined ||
+      cabinState.customFolgaEntrePortas !== undefined ||
       cabinState.baseChassisHidraulicoL !== undefined ||
       cabinState.baseChassisHidraulicoSuspensao !== undefined ||
       cabinState.baseChassisEletricoL !== undefined ||
@@ -445,7 +461,6 @@ export default function ElevatorConfiguratorPage() {
                   onChange={setCabinState}
                   configMode={configMode}
                   onConfigModeChange={setConfigMode}
-                  onOpenSystemSettings={() => setIsSystemSettingsOpen(true)}
                   shaftConfig={shaftConfig}
                   onShaftConfigChange={setShaftConfig}
                 />
@@ -557,9 +572,25 @@ export default function ElevatorConfiguratorPage() {
                   {activeState.tipoEntrada}
                 </span>
               </div>
-              <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-2">
-                <span className="block text-[9px] text-slate-400 font-medium uppercase tracking-wider">
-                  Porta
+              <div
+                className="bg-slate-900 border border-slate-800/80 rounded-lg p-2"
+                title={
+                  results.incluirPortaPavimento
+                    ? `Porta de Pavimento selecionada: folga da porta = ${results.folgaFrontal} mm (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm) no lugar de ${results.folgaFrontalBase} mm`
+                    : `Porta Normal: folga da porta = ${results.folgaFrontal} mm`
+                }
+              >
+                <span className="flex items-center justify-between text-[9px] text-slate-400 font-medium uppercase tracking-wider">
+                  <span>Porta</span>
+                  <span
+                    className={`text-[8px] font-mono font-semibold ${
+                      results.incluirPortaPavimento ? 'text-amber-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {results.incluirPortaPavimento
+                      ? `Pav ${results.folgaFrontal}mm`
+                      : `Folga ${results.folgaFrontal}mm`}
+                  </span>
                 </span>
                 <span className="text-xs font-semibold text-sky-400 mt-0.5 block truncate">
                   {activeState.tipoPorta} ({activeState.aberturaPorta}mm)

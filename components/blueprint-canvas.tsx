@@ -219,26 +219,56 @@ export function BlueprintCanvas({
       let cbX: number;
       let cbY: number;
 
-      const folgaFrontalMm = results.folgaFrontal || 160;
-      const folgaFrontalScaled = folgaFrontalMm * scale;
+      const folgaFrontalMm = results.folgaFrontal || 210;
+      const incluirPortaPavimento = results.incluirPortaPavimento ?? false;
+      const portaPavimentoMm = results.portaPavimentoMm ?? 90;
+      const folgaEntrePortasMm = results.folgaEntrePortasMm ?? 30;
+      const portaPavDraw = incluirPortaPavimento ? portaPavimentoMm * scale : 0;
+      const folgaPortasDraw = incluirPortaPavimento ? folgaEntrePortasMm * scale : 0;
+
+      const hasFrontDoor = results.hasFrontDoor ?? (!isDoorOnDepth || isEntranceAdjacent);
+      const hasRearDoor = results.hasRearDoor ?? (!isDoorOnDepth && isEntranceOpposite);
+      const hasRightDoor = results.hasRightDoor ?? (isDoorOnDepth || isEntranceAdjacent);
+      const hasLeftDoor = results.hasLeftDoor ?? (isDoorOnDepth && isEntranceOpposite);
+
+      const folgaEsqScaled = (results.folgaEsquerda ?? espacoChassis) * scale;
+      const folgaDirScaled = (results.folgaDireita ?? menorFolga) * scale;
+      const folgaFrenteScaled = (results.folgaFrontalParede ?? folgaFrontalMm) * scale;
+      const folgaFundoScaled = (results.folgaFundoParede ?? (state.customFolgaFundo ?? 120)) * scale;
 
       if (isChassisSide) {
         // Chassis na lateral esquerda
-        cbX = pocoLeft + espChassisScaled;
+        cbX = pocoLeft + folgaEsqScaled;
         if (cbX + cabineDrawWidth > pocoLeft + pocoDrawWidth) {
           cbX = pocoLeft + Math.max(0, (pocoDrawWidth - cabineDrawWidth) / 2);
         }
 
-        // Porta frontal fica no fundo da tela (inferior/bottom)
-        const targetCbBottom = pocoTop + pocoDrawHeight - folgaFrontalScaled;
-        cbY = targetCbBottom - cabineDrawHeight;
+        // Posição Y: alinha pela parede frontal quando há porta frontal
+        if (hasFrontDoor) {
+          const targetCbBottom = pocoTop + pocoDrawHeight - folgaFrenteScaled;
+          cbY = targetCbBottom - cabineDrawHeight;
+        } else {
+          cbY = pocoTop + (pocoDrawHeight - cabineDrawHeight) / 2;
+        }
         if (cbY < pocoTop) {
           cbY = pocoTop + Math.max(0, (pocoDrawHeight - cabineDrawHeight) / 2);
         }
       } else {
         // Chassis no fundo (parede traseira / superior)
-        cbX = pocoLeft + (pocoDrawWidth - cabineDrawWidth) / 2;
-        cbY = pocoTop + espChassisScaled;
+        if (hasRightDoor && !hasLeftDoor) {
+          cbX = pocoLeft + pocoDrawWidth - folgaDirScaled - cabineDrawWidth;
+          if (cbX < pocoLeft) {
+            cbX = pocoLeft + Math.max(0, (pocoDrawWidth - cabineDrawWidth) / 2);
+          }
+        } else if (hasLeftDoor && !hasRightDoor) {
+          cbX = pocoLeft + folgaEsqScaled;
+          if (cbX + cabineDrawWidth > pocoLeft + pocoDrawWidth) {
+            cbX = pocoLeft + Math.max(0, (pocoDrawWidth - cabineDrawWidth) / 2);
+          }
+        } else {
+          cbX = pocoLeft + (pocoDrawWidth - cabineDrawWidth) / 2;
+        }
+        cbY = pocoTop + folgaFundoScaled;
         if (cbY + cabineDrawHeight > pocoTop + pocoDrawHeight) {
           cbY = pocoTop + Math.max(0, (pocoDrawHeight - cabineDrawHeight) / 2);
         }
@@ -306,8 +336,8 @@ export function BlueprintCanvas({
       const frontDoorLeft = cbX + (cabineDrawWidth - doorDrawWidth) / 2;
       const sideDoorTop = cbY + (cabineDrawHeight - doorDrawWidth) / 2;
 
-      // Front Wall Cutout (Bottom) - if door is installed on width face
-      if (!isDoorOnDepth) {
+      // Front Wall Cutout (Bottom)
+      if (hasFrontDoor) {
         ctx.fillStyle = '#081426';
         ctx.fillRect(
           frontDoorLeft,
@@ -317,23 +347,33 @@ export function BlueprintCanvas({
         );
       }
 
-      // Rear Wall Cutout (Top) if Opposite entrance
-      if (isEntranceOpposite) {
-        const rearDoorLeft = cbX + (cabineDrawWidth - doorDrawWidth) / 2;
+      // Rear Wall Cutout (Top)
+      if (hasRearDoor) {
         ctx.fillStyle = '#081426';
         ctx.fillRect(
-          rearDoorLeft,
+          frontDoorLeft,
           pocoTop - wallThickness - 3,
           doorDrawWidth,
           wallThickness + 6
         );
       }
 
-      // Side Wall Cutout (Right) if Adjacent entrance OR door is on depth face
-      if (isEntranceAdjacent || isDoorOnDepth) {
+      // Right Side Wall Cutout
+      if (hasRightDoor) {
         ctx.fillStyle = '#081426';
         ctx.fillRect(
           pocoLeft + pocoDrawWidth - 1.5,
+          sideDoorTop,
+          wallThickness + 6,
+          doorDrawWidth
+        );
+      }
+
+      // Left Side Wall Cutout
+      if (hasLeftDoor) {
+        ctx.fillStyle = '#081426';
+        ctx.fillRect(
+          pocoLeft - wallThickness - 3,
           sideDoorTop,
           wallThickness + 6,
           doorDrawWidth
@@ -561,68 +601,84 @@ export function BlueprintCanvas({
         }
       }
 
-      // 6. Cabin Walls and Interior
+      // 6. Cabin Walls and Interior (per-wall openings for any active door)
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = isHighResExport ? 4.5 : 2.5;
 
-      const montanteDraw = Math.max(0, (ladoFaceDraw - doorDrawWidth) / 2);
+      const horizMontanteDraw = Math.max(0, (cabineDrawWidth - doorDrawWidth) / 2);
+      const vertMontanteDraw = Math.max(0, (cabineDrawHeight - doorDrawWidth) / 2);
+      const mThick = isHighResExport ? 8 : 4;
 
-      if (!isDoorOnDepth) {
-        // Back wall, left wall, right wall
-        ctx.beginPath();
-        ctx.moveTo(cbX, cbBottom);
-        ctx.lineTo(cbX, cbY);
-        ctx.lineTo(cbRight, cbY);
-        ctx.lineTo(cbRight, cbBottom);
-        ctx.stroke();
-
-        // Front wall with door opening and solid montante columns
-        ctx.beginPath();
+      // Bottom (Front) cabin wall
+      ctx.beginPath();
+      if (hasFrontDoor) {
         ctx.moveTo(cbX, cbBottom);
         ctx.lineTo(frontDoorLeft, cbBottom);
         ctx.moveTo(frontDoorLeft + doorDrawWidth, cbBottom);
         ctx.lineTo(cbRight, cbBottom);
-        ctx.stroke();
-
-        // Solid return columns (montantes frontais)
-        if (montanteDraw > 1) {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-          const mThick = isHighResExport ? 8 : 4;
-          ctx.fillRect(cbX, cbBottom - mThick, montanteDraw, mThick);
-          ctx.fillRect(
-            cbRight - montanteDraw,
-            cbBottom - mThick,
-            montanteDraw,
-            mThick
-          );
-        }
       } else {
-        // Door is on depth face (side)
-        ctx.beginPath();
-        ctx.moveTo(cbRight, cbBottom);
-        ctx.lineTo(cbX, cbBottom);
-        ctx.lineTo(cbX, cbY);
-        ctx.lineTo(cbRight, cbY);
-        ctx.stroke();
+        ctx.moveTo(cbX, cbBottom);
+        ctx.lineTo(cbRight, cbBottom);
+      }
+      ctx.stroke();
+      if (hasFrontDoor && horizMontanteDraw > 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(cbX, cbBottom - mThick, horizMontanteDraw, mThick);
+        ctx.fillRect(cbRight - horizMontanteDraw, cbBottom - mThick, horizMontanteDraw, mThick);
+      }
 
-        ctx.beginPath();
+      // Top (Rear) cabin wall
+      ctx.beginPath();
+      if (hasRearDoor) {
+        ctx.moveTo(cbX, cbY);
+        ctx.lineTo(frontDoorLeft, cbY);
+        ctx.moveTo(frontDoorLeft + doorDrawWidth, cbY);
+        ctx.lineTo(cbRight, cbY);
+      } else {
+        ctx.moveTo(cbX, cbY);
+        ctx.lineTo(cbRight, cbY);
+      }
+      ctx.stroke();
+      if (hasRearDoor && horizMontanteDraw > 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(cbX, cbY, horizMontanteDraw, mThick);
+        ctx.fillRect(cbRight - horizMontanteDraw, cbY, horizMontanteDraw, mThick);
+      }
+
+      // Right cabin wall
+      ctx.beginPath();
+      if (hasRightDoor) {
         ctx.moveTo(cbRight, cbY);
         ctx.lineTo(cbRight, sideDoorTop);
         ctx.moveTo(cbRight, sideDoorTop + doorDrawWidth);
         ctx.lineTo(cbRight, cbBottom);
-        ctx.stroke();
+      } else {
+        ctx.moveTo(cbRight, cbY);
+        ctx.lineTo(cbRight, cbBottom);
+      }
+      ctx.stroke();
+      if (hasRightDoor && vertMontanteDraw > 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(cbRight - mThick, cbY, mThick, vertMontanteDraw);
+        ctx.fillRect(cbRight - mThick, cbBottom - vertMontanteDraw, mThick, vertMontanteDraw);
+      }
 
-        if (montanteDraw > 1) {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-          const mThick = isHighResExport ? 8 : 4;
-          ctx.fillRect(cbRight - mThick, cbY, mThick, montanteDraw);
-          ctx.fillRect(
-            cbRight - mThick,
-            cbBottom - montanteDraw,
-            mThick,
-            montanteDraw
-          );
-        }
+      // Left cabin wall
+      ctx.beginPath();
+      if (hasLeftDoor) {
+        ctx.moveTo(cbX, cbY);
+        ctx.lineTo(cbX, sideDoorTop);
+        ctx.moveTo(cbX, sideDoorTop + doorDrawWidth);
+        ctx.lineTo(cbX, cbBottom);
+      } else {
+        ctx.moveTo(cbX, cbY);
+        ctx.lineTo(cbX, cbBottom);
+      }
+      ctx.stroke();
+      if (hasLeftDoor && vertMontanteDraw > 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(cbX, cbY, mThick, vertMontanteDraw);
+        ctx.fillRect(cbX, cbBottom - vertMontanteDraw, mThick, vertMontanteDraw);
       }
 
       // Inner cyan finish
@@ -646,7 +702,49 @@ export function BlueprintCanvas({
       ctx.lineTo(cbCenterX, cbCenterY + chSize);
       ctx.stroke();
 
-      // 7. Doors (Sliding Leaves)
+      const landingDoorStrokeColor = incluirPortaPavimento ? '#FBBF24' : '#B0BEC5';
+
+      // 7. Doors (Sliding Leaves) & Landing Door Sill Zone (90 + 30 mm)
+      const drawLandingDoorZone = (
+        zoneX: number,
+        zoneY: number,
+        zoneW: number,
+        zoneH: number,
+        gapLine: { x1: number; y1: number; x2: number; y2: number },
+        labelText?: string,
+        labelPos?: { x: number; y: number; align?: CanvasTextAlign }
+      ) => {
+        if (!incluirPortaPavimento || zoneW <= 0 || zoneH <= 0) return;
+        ctx.save();
+        // Faixa da porta de pavimento (90 mm) no interior do poço
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.16)';
+        ctx.fillRect(zoneX, zoneY, zoneW, zoneH);
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.72)';
+        ctx.lineWidth = isHighResExport ? 2 : 1;
+        ctx.strokeRect(zoneX, zoneY, zoneW, zoneH);
+
+        // Linha tracejada da folga entre portas (30 mm)
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+        ctx.lineWidth = isHighResExport ? 1.5 : 0.9;
+        ctx.setLineDash(isHighResExport ? [6, 4] : [3, 2]);
+        ctx.beginPath();
+        ctx.moveTo(gapLine.x1, gapLine.y1);
+        ctx.lineTo(gapLine.x2, gapLine.y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (labelText && labelPos) {
+          ctx.fillStyle = '#FBBF24';
+          ctx.font = isHighResExport
+            ? 'bold 14px ui-monospace, monospace'
+            : 'bold 8.5px ui-monospace, monospace';
+          ctx.textAlign = labelPos.align ?? 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, labelPos.x, labelPos.y);
+        }
+        ctx.restore();
+      };
+
       const drawSlidingDoors = (
         doorType: string,
         doorStart: number,
@@ -682,8 +780,8 @@ export function BlueprintCanvas({
               ctx.lineTo(lx2, cabY + 2 + step);
               ctx.stroke();
 
-              ctx.strokeStyle = '#B0BEC5';
-              ctx.lineWidth = leafThick * 0.8;
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
               ctx.beginPath();
               ctx.moveTo(lx1, landY + step);
               ctx.lineTo(lx2, landY + step);
@@ -698,8 +796,8 @@ export function BlueprintCanvas({
               ctx.lineTo(rx2, cabY + 2 + step);
               ctx.stroke();
 
-              ctx.strokeStyle = '#B0BEC5';
-              ctx.lineWidth = leafThick * 0.8;
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
               ctx.beginPath();
               ctx.moveTo(rx1, landY + step);
               ctx.lineTo(rx2, landY + step);
@@ -719,8 +817,8 @@ export function BlueprintCanvas({
               ctx.lineTo(x2, cabY + 2 + step);
               ctx.stroke();
 
-              ctx.strokeStyle = '#B0BEC5';
-              ctx.lineWidth = leafThick * 0.8;
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
               ctx.beginPath();
               ctx.moveTo(x1, landY + step);
               ctx.lineTo(x2, landY + step);
@@ -741,8 +839,8 @@ export function BlueprintCanvas({
             ctx.lineTo(cabY + 2 + step, y2);
             ctx.stroke();
 
-            ctx.strokeStyle = '#B0BEC5';
-            ctx.lineWidth = leafThick * 0.8;
+            ctx.strokeStyle = landingDoorStrokeColor;
+            ctx.lineWidth = leafThick * 0.85;
             ctx.beginPath();
             ctx.moveTo(landY + step, y1);
             ctx.lineTo(landY + step, y2);
@@ -752,48 +850,139 @@ export function BlueprintCanvas({
         ctx.restore();
       };
 
-      // Door rendering (Front or Side based on ladoPorta)
-      if (!isDoorOnDepth) {
+      // Door rendering on every active door wall
+      if (hasFrontDoor) {
+        const frontLandY = incluirPortaPavimento
+          ? pocoTop + pocoDrawHeight - portaPavDraw * 0.55
+          : pocoTop + pocoDrawHeight + wallThickness / 2;
+        if (incluirPortaPavimento) {
+          const bandLeft = Math.max(pocoLeft + 2, cbX - (isHighResExport ? 10 : 5));
+          const bandRight = Math.min(pocoLeft + pocoDrawWidth - 2, cbRight + (isHighResExport ? 10 : 5));
+          const bandTop = pocoTop + pocoDrawHeight - portaPavDraw;
+          drawLandingDoorZone(
+            bandLeft,
+            bandTop,
+            bandRight - bandLeft,
+            portaPavDraw,
+            {
+              x1: bandLeft,
+              y1: bandTop - folgaPortasDraw,
+              x2: bandRight,
+              y2: bandTop - folgaPortasDraw,
+            },
+            `P.PAV ${portaPavimentoMm}+${folgaEntrePortasMm}mm`,
+            {
+              x: pocoLeft + (isHighResExport ? 10 : 5),
+              y: bandTop + portaPavDraw / 2,
+              align: 'left',
+            }
+          );
+        }
         drawSlidingDoors(
           state.tipoPorta,
           frontDoorLeft,
           doorDrawWidth,
           cbBottom,
-          pocoTop + pocoDrawHeight + wallThickness / 2,
+          frontLandY,
           false
         );
-      } else {
+      }
+
+      if (hasRearDoor) {
+        const rearLandY = incluirPortaPavimento
+          ? pocoTop + portaPavDraw * 0.45
+          : pocoTop - wallThickness / 2;
+        if (incluirPortaPavimento) {
+          const bandLeft = Math.max(pocoLeft + 2, cbX - (isHighResExport ? 10 : 5));
+          const bandRight = Math.min(pocoLeft + pocoDrawWidth - 2, cbRight + (isHighResExport ? 10 : 5));
+          drawLandingDoorZone(
+            bandLeft,
+            pocoTop,
+            bandRight - bandLeft,
+            portaPavDraw,
+            {
+              x1: bandLeft,
+              y1: pocoTop + portaPavDraw + folgaPortasDraw,
+              x2: bandRight,
+              y2: pocoTop + portaPavDraw + folgaPortasDraw,
+            }
+          );
+        }
+        drawSlidingDoors(
+          state.tipoPorta,
+          frontDoorLeft,
+          doorDrawWidth,
+          cbY,
+          rearLandY,
+          false
+        );
+      }
+
+      if (hasRightDoor) {
+        const sideLandX = incluirPortaPavimento
+          ? pocoLeft + pocoDrawWidth - portaPavDraw * 0.55
+          : pocoLeft + pocoDrawWidth + wallThickness / 2;
+        if (incluirPortaPavimento) {
+          const bandTop = Math.max(pocoTop + 2, cbY - (isHighResExport ? 10 : 5));
+          const bandBottom = Math.min(pocoTop + pocoDrawHeight - 2, cbBottom + (isHighResExport ? 10 : 5));
+          const bandLeft = pocoLeft + pocoDrawWidth - portaPavDraw;
+          drawLandingDoorZone(
+            bandLeft,
+            bandTop,
+            portaPavDraw,
+            bandBottom - bandTop,
+            {
+              x1: bandLeft - folgaPortasDraw,
+              y1: bandTop,
+              x2: bandLeft - folgaPortasDraw,
+              y2: bandBottom,
+            },
+            !hasFrontDoor ? `P.PAV ${portaPavimentoMm}+${folgaEntrePortasMm}` : undefined,
+            !hasFrontDoor
+              ? {
+                  x: pocoLeft + pocoDrawWidth - (isHighResExport ? 6 : 3),
+                  y: pocoTop + (isHighResExport ? 16 : 9),
+                  align: 'right',
+                }
+              : undefined
+          );
+        }
         drawSlidingDoors(
           state.tipoPorta,
           sideDoorTop,
           doorDrawWidth,
           cbRight,
-          pocoLeft + pocoDrawWidth + wallThickness / 2,
+          sideLandX,
           true
         );
       }
 
-      // Opposite door
-      if (isEntranceOpposite) {
-        const rearDoorLeft = cbX + (cabineDrawWidth - doorDrawWidth) / 2;
-        drawSlidingDoors(
-          state.tipoPorta,
-          rearDoorLeft,
-          doorDrawWidth,
-          cbY,
-          pocoTop - wallThickness / 2,
-          false
-        );
-      }
-
-      // Adjacent door (when entrance is adjacent and primary door is on width)
-      if (isEntranceAdjacent && !isDoorOnDepth) {
+      if (hasLeftDoor) {
+        const leftLandX = incluirPortaPavimento
+          ? pocoLeft + portaPavDraw * 0.45
+          : pocoLeft - wallThickness / 2;
+        if (incluirPortaPavimento) {
+          const bandTop = Math.max(pocoTop + 2, cbY - (isHighResExport ? 10 : 5));
+          const bandBottom = Math.min(pocoTop + pocoDrawHeight - 2, cbBottom + (isHighResExport ? 10 : 5));
+          drawLandingDoorZone(
+            pocoLeft,
+            bandTop,
+            portaPavDraw,
+            bandBottom - bandTop,
+            {
+              x1: pocoLeft + portaPavDraw + folgaPortasDraw,
+              y1: bandTop,
+              x2: pocoLeft + portaPavDraw + folgaPortasDraw,
+              y2: bandBottom,
+            }
+          );
+        }
         drawSlidingDoors(
           state.tipoPorta,
           sideDoorTop,
           doorDrawWidth,
-          cbRight,
-          pocoLeft + pocoDrawWidth + wallThickness / 2,
+          cbX,
+          leftLandX,
           true
         );
       }
@@ -1130,8 +1319,11 @@ export function BlueprintCanvas({
 
       const montanteMm = Math.max(0, Math.round((ladoFaceMm - aberturaPorta) / 2));
       ctx.fillStyle = isPortaMenor ? '#FFAB40' : '#EF4444';
+      const pavSuffix = incluirPortaPavimento
+        ? ` | P.Pav ${folgaFrontalMm}mm (${portaPavimentoMm}+${folgaEntrePortasMm})`
+        : ` | Folga ${folgaFrontalMm}mm`;
       ctx.fillText(
-        `PORTA: ${state.tipoPorta} (${state.aberturaPorta} mm) | Face: ${ladoFaceMm} mm`,
+        `PORTA: ${state.tipoPorta} (${state.aberturaPorta}mm)${pavSuffix}`,
         tbLeft + (isHighResExport ? 16 : 8),
         tbTop + (isHighResExport ? 124 : isCompact ? 64 : 72)
       );
@@ -1586,7 +1778,11 @@ export function BlueprintCanvas({
             </div>
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
-              <span>Porta</span>
+              <span>
+                {results.incluirPortaPavimento
+                  ? `P. Pav (${results.folgaFrontal}mm: ${results.portaPavimentoMm}+${results.folgaEntrePortasMm})`
+                  : `Porta Normal (${results.folgaFrontal}mm)`}
+              </span>
             </div>
             <div className="flex items-center gap-1">
               <span

@@ -20,6 +20,9 @@ import {
   LADOS_INSTALACAO_PORTA,
   ABERTURAS_PORTA,
   getMaiorAberturaValida,
+  DEFAULT_FOLGA_PORTA_NORMAL_MM,
+  DEFAULT_PORTA_PAVIMENTO_MM,
+  DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
 import {
   Building2,
@@ -73,6 +76,12 @@ export function ShaftCalculator({
     setLocalPp(shaftConfig.profundidadePoco.toString());
   }
 
+  const incluirPortaPavimento = shaftConfig.incluirPortaPavimento ?? false;
+  const folgaPortaNormalMm = customClearances?.customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaPavimentoMm = customClearances?.customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
+  const folgaEntrePortasMm = customClearances?.customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
+  const folgaPortaPavMm = portaPavimentoMm + folgaEntrePortasMm;
+
   // Executa o cálculo inverso de cabines viáveis estritamente a partir do poço informado
   const calculationResult = useMemo(() => {
     return calculatePossibleCabinsFromShaft({
@@ -84,9 +93,12 @@ export function ShaftCalculator({
       tipoEntrada: shaftConfig.tipoEntrada,
       tipoPorta: shaftConfig.tipoPorta,
       ladoPorta: shaftConfig.ladoPorta,
+      incluirPortaPavimento: shaftConfig.incluirPortaPavimento,
       customMenorFolga: customClearances?.customMenorFolga,
       customFolgaFrontal: customClearances?.customFolgaFrontal,
       customFolgaFundo: customClearances?.customFolgaFundo,
+      customPortaPavimento: customClearances?.customPortaPavimento,
+      customFolgaEntrePortas: customClearances?.customFolgaEntrePortas,
       baseChassisHidraulicoL: customClearances?.baseChassisHidraulicoL,
       baseChassisHidraulicoSuspensao: customClearances?.baseChassisHidraulicoSuspensao,
       baseChassisEletricoL: customClearances?.baseChassisEletricoL,
@@ -283,6 +295,17 @@ export function ShaftCalculator({
               </span>
               <span className="text-[10px] text-emerald-400 font-mono">
                 Passo 50mm
+              </span>
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-semibold border ${
+                  incluirPortaPavimento
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                    : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                }`}
+              >
+                {incluirPortaPavimento
+                  ? `P. Pav: ${folgaPortaPavMm}mm (${portaPavimentoMm}+${folgaEntrePortasMm})`
+                  : `P. Normal: ${folgaPortaNormalMm}mm`}
               </span>
               {activeCabin.isForaDaNorma && (
                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 font-medium font-mono">
@@ -639,6 +662,67 @@ export function ShaftCalculator({
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Seletor: Porta Normal (210 mm) vs Porta de Pavimento (90 + 30 = 120 mm) */}
+          <div className="mt-2 pt-2 border-t border-slate-800/70">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
+              <span>Folga da Porta no Poço</span>
+              <span className="font-mono text-amber-400">
+                Ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                id="btn-porta-normal-poco"
+                type="button"
+                onClick={() =>
+                  onChange({
+                    ...shaftConfig,
+                    incluirPortaPavimento: false,
+                    selectedCabinKey: null,
+                  })
+                }
+                className={`p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  !incluirPortaPavimento
+                    ? 'bg-sky-950/60 border-sky-500 text-sky-100 shadow-sm'
+                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className="text-[11px] font-bold flex items-center justify-between">
+                  <span>Porta Normal</span>
+                  {!incluirPortaPavimento && <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />}
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  Folga: {folgaPortaNormalMm} mm
+                </div>
+              </button>
+
+              <button
+                id="btn-toggle-porta-pavimento-poco"
+                type="button"
+                onClick={() =>
+                  onChange({
+                    ...shaftConfig,
+                    incluirPortaPavimento: true,
+                    selectedCabinKey: null,
+                  })
+                }
+                className={`p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  incluirPortaPavimento
+                    ? 'bg-amber-950/50 border-amber-500 text-amber-100 shadow-sm'
+                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className="text-[11px] font-bold flex items-center justify-between">
+                  <span>Porta de Pavimento</span>
+                  {incluirPortaPavimento && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                </div>
+                <div className="text-[10px] text-amber-300/90 font-mono">
+                  Folga: {folgaPortaPavMm} mm ({portaPavimentoMm}+{folgaEntrePortasMm})
+                </div>
+              </button>
             </div>
           </div>
         </div>

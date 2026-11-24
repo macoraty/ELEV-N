@@ -24,9 +24,11 @@ import {
   calculateShaftClearances,
   ShaftConfigState,
   INITIAL_SHAFT_STATE,
+  DEFAULT_FOLGA_PORTA_NORMAL_MM,
+  DEFAULT_PORTA_PAVIMENTO_MM,
+  DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
 import {
-  Sliders,
   Settings2,
   Box,
   DoorOpen,
@@ -47,7 +49,6 @@ interface ConfigPanelProps {
   onChange: (newState: ElevatorConfigState) => void;
   configMode?: 'cabine' | 'poco';
   onConfigModeChange?: (mode: 'cabine' | 'poco') => void;
-  onOpenSystemSettings?: () => void;
   shaftConfig?: ShaftConfigState;
   onShaftConfigChange?: (newConfig: ShaftConfigState) => void;
 }
@@ -57,7 +58,6 @@ export function ConfigPanel({
   onChange,
   configMode: controlledMode,
   onConfigModeChange,
-  onOpenSystemSettings,
   shaftConfig,
   onShaftConfigChange,
 }: ConfigPanelProps) {
@@ -79,8 +79,27 @@ export function ConfigPanel({
       arcada: state.arcada,
       ladoArcada: state.ladoArcada,
       tipoEntrada: state.tipoEntrada,
+      ladoPorta: state.ladoPorta,
+      incluirPortaPavimento: state.incluirPortaPavimento,
+      customPortaPavimento: state.customPortaPavimento,
+      customFolgaEntrePortas: state.customFolgaEntrePortas,
     });
-  }, [state.acionamento, state.arcada, state.ladoArcada, state.tipoEntrada]);
+  }, [
+    state.acionamento,
+    state.arcada,
+    state.ladoArcada,
+    state.tipoEntrada,
+    state.ladoPorta,
+    state.incluirPortaPavimento,
+    state.customPortaPavimento,
+    state.customFolgaEntrePortas,
+  ]);
+
+  const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
+  const folgaPortaNormalMm = state.customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
+  const portaPavimentoMm = state.customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
+  const folgaEntrePortasMm = state.customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
+  const folgaPortaPavMm = portaPavimentoMm + folgaEntrePortasMm;
 
 
   const larguraNum = parseInt(state.larguraCabine, 10) || 800;
@@ -135,6 +154,8 @@ export function ConfigPanel({
       state.customMenorFolga !== undefined ||
       state.customFolgaFrontal !== undefined ||
       state.customFolgaFundo !== undefined ||
+      state.customPortaPavimento !== undefined ||
+      state.customFolgaEntrePortas !== undefined ||
       state.baseChassisHidraulicoL !== undefined ||
       state.baseChassisHidraulicoSuspensao !== undefined ||
       state.baseChassisEletricoL !== undefined ||
@@ -203,7 +224,7 @@ export function ConfigPanel({
         {/* Botão de Folgas Técnicas Salvas */}
         <button
           onClick={() => setShowClearancesModal(true)}
-          title={hasCustomClearances ? "Configuração de Folgas Técnicas (Personalizadas e Salvas)" : "Configurar Folgas Técnicas (Salvas no Programa)"}
+          title={hasCustomClearances ? "Configuração de Folgas Técnicas — Acesso por senha (Personalizadas e Salvas)" : "Configurar Folgas Técnicas — Acesso por senha"}
           className="relative p-2 shrink-0 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors rounded-xl flex items-center justify-center cursor-pointer group"
         >
           <Settings2 className="w-4 h-4" />
@@ -214,18 +235,6 @@ export function ConfigPanel({
             />
           )}
         </button>
-
-        {/* Botão de Configurações do Sistema e Logotipo */}
-        {onOpenSystemSettings && (
-          <button
-            type="button"
-            onClick={onOpenSystemSettings}
-            title="Configurações do Sistema, Logotipo e Marca d'Água"
-            className="p-2 shrink-0 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors rounded-xl flex items-center justify-center cursor-pointer group"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
-        )}
       </div>
 
       {/* Renderização Condicional: Modo Poço (Inverso) ou Modo Cabine (Direto) */}
@@ -486,6 +495,59 @@ export function ConfigPanel({
               </div>
             </div>
           )}
+
+          {/* Seletor: Folga da Porta (Porta Normal 210 mm vs Porta de Pavimento 90+30 = 120 mm) */}
+          <div className="mt-2.5 pt-2.5 border-t border-slate-800/80">
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-300 mb-1.5">
+              <span>Tipo de Instalação / Folga da Porta</span>
+              <span className="text-[10px] font-mono text-amber-400">
+                Folga ativa: {incluirPortaPavimento ? `${folgaPortaPavMm} mm (${portaPavimentoMm}+${folgaEntrePortasMm})` : `${folgaPortaNormalMm} mm`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                id="btn-porta-normal-cabine"
+                type="button"
+                onClick={() => updateField('incluirPortaPavimento', false)}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  !incluirPortaPavimento
+                    ? 'bg-cyan-950/60 border-cyan-500 text-white shadow-sm'
+                    : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs font-semibold flex items-center justify-between">
+                  <span>Porta Normal</span>
+                  {!incluirPortaPavimento && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  Folga da porta: {folgaPortaNormalMm} mm
+                </div>
+              </button>
+
+              <button
+                id="btn-toggle-porta-pavimento-cabine"
+                type="button"
+                onClick={() => updateField('incluirPortaPavimento', true)}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  incluirPortaPavimento
+                    ? 'bg-amber-950/50 border-amber-500 text-amber-100 shadow-sm'
+                    : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs font-semibold flex items-center justify-between">
+                  <span>Porta de Pavimento</span>
+                  {incluirPortaPavimento && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  )}
+                </div>
+                <div className="text-[10px] text-amber-300/90 font-mono mt-0.5">
+                  Folga: {folgaPortaPavMm} mm ({portaPavimentoMm}+{folgaEntrePortasMm})
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

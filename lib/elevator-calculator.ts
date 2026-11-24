@@ -34,6 +34,10 @@ export const ABERTURAS_PORTA = [
   '1200',
 ] as const;
 
+export const DEFAULT_FOLGA_PORTA_NORMAL_MM = 210;
+export const DEFAULT_PORTA_PAVIMENTO_MM = 90;
+export const DEFAULT_FOLGA_ENTRE_PORTAS_MM = 30;
+
 export interface ElevatorConfigState {
   larguraCabine: string;
   profundidadeCabine: string;
@@ -45,10 +49,13 @@ export interface ElevatorConfigState {
   tipoPorta: TipoPorta;
   tipoEntrada: TipoEntrada;
   ladoArcada: LadoArcada;
+  incluirPortaPavimento?: boolean;
   // Custom clearances overrides
   customMenorFolga?: number;
   customFolgaFrontal?: number;
   customFolgaFundo?: number;
+  customPortaPavimento?: number;
+  customFolgaEntrePortas?: number;
   // Rules overrides
   baseChassisHidraulicoL?: number;
   baseChassisHidraulicoSuspensao?: number;
@@ -71,6 +78,7 @@ export interface ShaftConfigState {
   tipoEntrada: TipoEntrada;
   ladoArcada: LadoArcada;
   ladoPorta: LadoInstalacaoPorta;
+  incluirPortaPavimento?: boolean;
   selectedCabinKey?: string | null;
   aberturaPorta?: string;
 }
@@ -85,6 +93,7 @@ export const INITIAL_SHAFT_STATE: ShaftConfigState = {
   tipoEntrada: 'Unilateral',
   ladoArcada: 'Lateral',
   ladoPorta: 'Largura',
+  incluirPortaPavimento: false,
   selectedCabinKey: null,
   aberturaPorta: '800',
 };
@@ -109,6 +118,19 @@ export interface ElevatorCalculationResults {
   espacoChassis: number;
   menorFolga: number;
   folgaFrontal: number;
+  folgaFrontalBase: number;
+  folgaEsquerda: number;
+  folgaDireita: number;
+  folgaFrontalParede: number;
+  folgaFundoParede: number;
+  hasFrontDoor: boolean;
+  hasRearDoor: boolean;
+  hasRightDoor: boolean;
+  hasLeftDoor: boolean;
+  incluirPortaPavimento: boolean;
+  portaPavimentoMm: number;
+  folgaEntrePortasMm: number;
+  adicionalPortaPavimentoMm: number;
   tipoSuporte: string;
   qtdSuporte: number;
   // Métricas ABNT NBR 16858-1
@@ -281,6 +303,7 @@ export const INITIAL_STATE: ElevatorConfigState = {
   tipoPorta: '2 Folhas Lateral',
   tipoEntrada: 'Unilateral',
   ladoArcada: 'Lateral',
+  incluirPortaPavimento: false,
 };
 
 export interface ElevatorPreset {
@@ -395,35 +418,48 @@ export function calculateElevator(
       folgaPorta = 450;
   }
 
-  let espacoChassis = 400;
-  if (state.acionamento === 'Hidráulico' && state.arcada === 'L') {
-    espacoChassis = state.baseChassisHidraulicoL ?? 320;
-  } else if (state.acionamento === 'Hidráulico') {
-    espacoChassis = state.baseChassisHidraulicoSuspensao ?? 280;
-  } else if (state.arcada === 'L') {
-    espacoChassis = state.baseChassisEletricoL ?? 450;
-  } else if (state.ladoArcada === 'Lateral') {
-    espacoChassis = state.baseChassisEletricoSuspensaoLateral ?? 420;
-  } else {
-    espacoChassis = state.baseChassisEletricoSuspensaoFundo ?? 400;
-  }
+  const ladoInstalacao: LadoInstalacaoPorta = state.ladoPorta || 'Largura';
+  const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
 
-  const menorFolga = state.customMenorFolga ?? 125;
-  const folgaFrontal = state.customFolgaFrontal ?? 160;
-  const folgaFundoPadrao = state.customFolgaFundo ?? 120;
+  const clearances = calculateShaftClearances({
+    acionamento: state.acionamento,
+    arcada: state.arcada,
+    ladoArcada: state.ladoArcada,
+    tipoEntrada: state.tipoEntrada,
+    ladoPorta: ladoInstalacao,
+    incluirPortaPavimento,
+    customMenorFolga: state.customMenorFolga,
+    customFolgaFrontal: state.customFolgaFrontal,
+    customFolgaFundo: state.customFolgaFundo,
+    customPortaPavimento: state.customPortaPavimento,
+    customFolgaEntrePortas: state.customFolgaEntrePortas,
+    baseChassisHidraulicoL: state.baseChassisHidraulicoL,
+    baseChassisHidraulicoSuspensao: state.baseChassisHidraulicoSuspensao,
+    baseChassisEletricoL: state.baseChassisEletricoL,
+    baseChassisEletricoSuspensaoLateral: state.baseChassisEletricoSuspensaoLateral,
+    baseChassisEletricoSuspensaoFundo: state.baseChassisEletricoSuspensaoFundo,
+  });
 
-  const folgaEntradaOposta = state.tipoEntrada === 'Oposta' ? 160 : 0;
-  const folgaEntradaAdjacente = state.tipoEntrada === 'Adjacente' ? 160 : 0;
+  const {
+    espacoChassis,
+    menorFolga,
+    folgaFrontal,
+    folgaFrontalBase,
+    folgaEsquerda,
+    folgaDireita,
+    folgaFrontalParede,
+    folgaFundoParede,
+    hasFrontDoor,
+    hasRearDoor,
+    hasRightDoor,
+    hasLeftDoor,
+    portaPavimentoMm,
+    folgaEntrePortasMm,
+    adicionalPortaPavimentoMm,
+  } = clearances;
 
-  const larguraPocoCalculada =
-    state.ladoArcada === 'Lateral'
-      ? largura + espacoChassis + menorFolga + folgaEntradaAdjacente
-      : largura + menorFolga * 2 + folgaEntradaAdjacente;
-
-  const profundidadePocoCalculada =
-    state.ladoArcada === 'Fundo'
-      ? profundidade + folgaFrontal + espacoChassis + folgaEntradaOposta
-      : profundidade + folgaFrontal + folgaFundoPadrao + folgaEntradaOposta;
+  const larguraPocoCalculada = largura + clearances.espacoFixoLargura;
+  const profundidadePocoCalculada = profundidade + clearances.espacoFixoProfundidade;
 
   const isPorPoco = Boolean(options?.isCalculadoPorPoco && options?.forcedLarguraPoco && options?.forcedProfundidadePoco);
   const larguraPoco = isPorPoco ? options!.forcedLarguraPoco! : larguraPocoCalculada;
@@ -443,7 +479,6 @@ export function calculateElevator(
   const cargaNBR = calcularCargaUtilNBR(areaCabineM2, numeroPassageiros);
 
   // Validação: A porta SEMPRE tem que ser menor que o lado da cabine onde ela vai instalada
-  const ladoInstalacao: LadoInstalacaoPorta = state.ladoPorta || 'Largura';
   const ladoFacePortaMm = ladoInstalacao === 'Profundidade' ? profundidade : largura;
   const nomeLadoPorta =
     ladoInstalacao === 'Profundidade'
@@ -480,6 +515,19 @@ export function calculateElevator(
     espacoChassis,
     menorFolga,
     folgaFrontal,
+    folgaFrontalBase,
+    folgaEsquerda,
+    folgaDireita,
+    folgaFrontalParede,
+    folgaFundoParede,
+    hasFrontDoor,
+    hasRearDoor,
+    hasRightDoor,
+    hasLeftDoor,
+    incluirPortaPavimento,
+    portaPavimentoMm,
+    folgaEntrePortasMm,
+    adicionalPortaPavimentoMm,
     tipoSuporte,
     qtdSuporte,
     areaCabineM2,
@@ -532,9 +580,12 @@ export interface ShaftToCabinsInput {
   tipoEntrada?: TipoEntrada;
   tipoPorta?: TipoPorta;
   ladoPorta?: LadoInstalacaoPorta;
+  incluirPortaPavimento?: boolean;
   customMenorFolga?: number;
   customFolgaFrontal?: number;
   customFolgaFundo?: number;
+  customPortaPavimento?: number;
+  customFolgaEntrePortas?: number;
   baseChassisHidraulicoL?: number;
   baseChassisHidraulicoSuspensao?: number;
   baseChassisEletricoL?: number;
@@ -553,6 +604,10 @@ export interface ShaftToCabinsResult {
   menorFolga: number;
   folgaFrontal: number;
   folgaFundoPadrao: number;
+  incluirPortaPavimento: boolean;
+  portaPavimentoMm: number;
+  folgaEntrePortasMm: number;
+  adicionalPortaPavimentoMm: number;
   isForaDaNorma: boolean;
   alertaNormativo?: string;
   isPocoInsuficiente: boolean;
@@ -564,9 +619,13 @@ export function calculateShaftClearances({
   arcada = 'L',
   ladoArcada = 'Lateral',
   tipoEntrada = 'Unilateral',
+  ladoPorta = 'Largura',
+  incluirPortaPavimento = false,
   customMenorFolga,
   customFolgaFrontal,
   customFolgaFundo,
+  customPortaPavimento,
+  customFolgaEntrePortas,
   baseChassisHidraulicoL,
   baseChassisHidraulicoSuspensao,
   baseChassisEletricoL,
@@ -577,9 +636,13 @@ export function calculateShaftClearances({
   arcada?: Arcada;
   ladoArcada?: LadoArcada;
   tipoEntrada?: TipoEntrada;
+  ladoPorta?: LadoInstalacaoPorta;
+  incluirPortaPavimento?: boolean;
   customMenorFolga?: number;
   customFolgaFrontal?: number;
   customFolgaFundo?: number;
+  customPortaPavimento?: number;
+  customFolgaEntrePortas?: number;
   baseChassisHidraulicoL?: number;
   baseChassisHidraulicoSuspensao?: number;
   baseChassisEletricoL?: number;
@@ -600,30 +663,70 @@ export function calculateShaftClearances({
   }
 
   const menorFolga = customMenorFolga ?? 125;
-  const folgaFrontal = customFolgaFrontal ?? 160;
+  const folgaFrontalBase = customFolgaFrontal ?? DEFAULT_FOLGA_PORTA_NORMAL_MM;
   const folgaFundoPadrao = customFolgaFundo ?? 120;
-  const folgaEntradaOposta = tipoEntrada === 'Oposta' ? 160 : 0;
-  const folgaEntradaAdjacente = tipoEntrada === 'Adjacente' ? 160 : 0;
 
-  // Espaço deduzido da Largura do Poço
-  const espacoFixoLargura =
+  const portaPavimentoMm = customPortaPavimento ?? DEFAULT_PORTA_PAVIMENTO_MM;
+  const folgaEntrePortasMm = customFolgaEntrePortas ?? DEFAULT_FOLGA_ENTRE_PORTAS_MM;
+  const folgaPortaPavimentoTotal = portaPavimentoMm + folgaEntrePortasMm;
+  const adicionalPortaPavimentoMm = incluirPortaPavimento ? folgaPortaPavimentoTotal : 0;
+  const folgaPortaAtiva = incluirPortaPavimento ? folgaPortaPavimentoTotal : folgaFrontalBase;
+
+  const isDoorOnDepth = ladoPorta === 'Profundidade';
+
+  // Quais lados do poço possuem porta
+  const hasFrontDoor = !isDoorOnDepth || tipoEntrada === 'Adjacente';
+  const hasRightDoor = isDoorOnDepth || tipoEntrada === 'Adjacente';
+  const hasRearDoor = !isDoorOnDepth && tipoEntrada === 'Oposta';
+  const hasLeftDoor = isDoorOnDepth && tipoEntrada === 'Oposta';
+
+  // No lado que tiver porta (frontal, oposta ou adjacente), retira-se a folga normal
+  // da parede (menorFolga / folgaFundoPadrao) e aplica-se a folga da porta ativa (210 ou 120 mm).
+  const folgaEsquerda =
     ladoArcada === 'Lateral'
-      ? espacoChassis + menorFolga + folgaEntradaAdjacente
-      : menorFolga * 2 + folgaEntradaAdjacente;
+      ? espacoChassis + (hasLeftDoor ? folgaPortaAtiva : 0)
+      : hasLeftDoor
+      ? folgaPortaAtiva
+      : menorFolga;
 
-  // Espaço deduzido da Profundidade do Poço
-  const espacoFixoProfundidade =
+  const folgaDireita = hasRightDoor ? folgaPortaAtiva : menorFolga;
+
+  const folgaFrontalParede = hasFrontDoor ? folgaPortaAtiva : folgaFundoPadrao;
+
+  const folgaFundoParede =
     ladoArcada === 'Fundo'
-      ? folgaFrontal + espacoChassis + folgaEntradaOposta
-      : folgaFrontal + folgaFundoPadrao + folgaEntradaOposta;
+      ? espacoChassis + (hasRearDoor ? folgaPortaAtiva : 0)
+      : hasRearDoor
+      ? folgaPortaAtiva
+      : folgaFundoPadrao;
+
+  const espacoFixoLargura = folgaEsquerda + folgaDireita;
+  const espacoFixoProfundidade = folgaFrontalParede + folgaFundoParede;
+
+  const folgaFrontal = folgaPortaAtiva;
+  const folgaEntradaOposta = tipoEntrada === 'Oposta' ? folgaPortaAtiva : 0;
+  const folgaEntradaAdjacente = tipoEntrada === 'Adjacente' ? folgaPortaAtiva : 0;
 
   return {
     espacoChassis,
     menorFolga,
     folgaFrontal,
+    folgaFrontalBase,
     folgaFundoPadrao,
+    folgaEsquerda,
+    folgaDireita,
+    folgaFrontalParede,
+    folgaFundoParede,
+    hasFrontDoor,
+    hasRearDoor,
+    hasRightDoor,
+    hasLeftDoor,
     folgaEntradaOposta,
     folgaEntradaAdjacente,
+    incluirPortaPavimento,
+    portaPavimentoMm,
+    folgaEntrePortasMm,
+    adicionalPortaPavimentoMm,
     espacoFixoLargura,
     espacoFixoProfundidade,
   };
@@ -647,15 +750,20 @@ export function calculatePossibleCabinsFromShaft(
   const ladoArcada = input.ladoArcada || 'Lateral';
   const tipoEntrada = input.tipoEntrada || 'Unilateral';
   const ladoPorta = input.ladoPorta || 'Largura';
+  const incluirPortaPavimento = input.incluirPortaPavimento ?? false;
 
   const clearances = calculateShaftClearances({
     acionamento,
     arcada,
     ladoArcada,
     tipoEntrada,
+    ladoPorta,
+    incluirPortaPavimento,
     customMenorFolga: input.customMenorFolga,
     customFolgaFrontal: input.customFolgaFrontal,
     customFolgaFundo: input.customFolgaFundo,
+    customPortaPavimento: input.customPortaPavimento,
+    customFolgaEntrePortas: input.customFolgaEntrePortas,
     baseChassisHidraulicoL: input.baseChassisHidraulicoL,
     baseChassisHidraulicoSuspensao: input.baseChassisHidraulicoSuspensao,
     baseChassisEletricoL: input.baseChassisEletricoL,
@@ -755,15 +863,8 @@ export function calculatePossibleCabinsFromShaft(
     const maxAbertura = getMaiorAberturaValida(ladoEfetivo);
 
     // Poço mínimo exigido por esta cabine
-    const lpMin =
-      ladoArcada === 'Lateral'
-        ? w + clearances.espacoChassis + clearances.menorFolga + clearances.folgaEntradaAdjacente
-        : w + clearances.menorFolga * 2 + clearances.folgaEntradaAdjacente;
-
-    const ppMin =
-      ladoArcada === 'Fundo'
-        ? d + clearances.folgaFrontal + clearances.espacoChassis + clearances.folgaEntradaOposta
-        : d + clearances.folgaFrontal + clearances.folgaFundoPadrao + clearances.folgaEntradaOposta;
+    const lpMin = w + clearances.espacoFixoLargura;
+    const ppMin = d + clearances.espacoFixoProfundidade;
 
     const sobraLP = Math.max(0, lp - lpMin);
     const sobraPP = Math.max(0, pp - ppMin);
@@ -853,6 +954,10 @@ export function calculatePossibleCabinsFromShaft(
     menorFolga: clearances.menorFolga,
     folgaFrontal: clearances.folgaFrontal,
     folgaFundoPadrao: clearances.folgaFundoPadrao,
+    incluirPortaPavimento: clearances.incluirPortaPavimento,
+    portaPavimentoMm: clearances.portaPavimentoMm,
+    folgaEntrePortasMm: clearances.folgaEntrePortasMm,
+    adicionalPortaPavimentoMm: clearances.adicionalPortaPavimentoMm,
     isForaDaNorma,
     alertaNormativo,
     isPocoInsuficiente: isPocoMuitoApertado,

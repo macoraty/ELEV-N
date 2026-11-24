@@ -369,6 +369,16 @@ export async function generateElevatorPdf({
     currentY,
     true
   );
+  currentY = drawRow(
+    'Folga de Instalação da Porta (Normal vs Pavimento)',
+    results.incluirPortaPavimento
+      ? `Porta de Pavimento: ${results.folgaFrontal} mm (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)`
+      : `Porta Normal: ${results.folgaFrontal} mm`,
+    currentY,
+    false,
+    results.incluirPortaPavimento ? [217, 119, 6] : [2, 132, 199],
+    true
+  );
 
   currentY += 4;
 
@@ -414,10 +424,18 @@ export async function generateElevatorPdf({
     );
   }
   currentY = drawRow(
-    'Folga Frontal (Soleira da Cabine ao Marco do Pavimento)',
-    `${results.folgaFrontal} mm`,
+    'Folga da Porta por Acesso (Substitui Folga Normal no Lado da Porta)',
+    results.incluirPortaPavimento
+      ? `${results.folgaFrontal} mm (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm)`
+      : `${results.folgaFrontal} mm (Porta Normal)`,
     currentY,
     results.isCalculadoPorPoco ? true : false
+  );
+  currentY = drawRow(
+    'Distribuição de Folgas nas 4 Paredes (Esq / Dir | Frente / Fundo)',
+    `X: ${results.folgaEsquerda} / ${results.folgaDireita} mm  |  Y: ${results.folgaFrontalParede} / ${results.folgaFundoParede} mm`,
+    currentY,
+    results.isCalculadoPorPoco ? false : true
   );
   currentY = drawRow(
     'Folga Necessária para Recolhimento da Porta',
@@ -616,7 +634,12 @@ export async function generateElevatorPdf({
 
   const legendItems = [
     { color: [100, 255, 218], label: 'Cabine Útil e Paredes Internas' },
-    { color: [255, 171, 64], label: 'Abertura Livre e Folhas da Porta' },
+    {
+      color: [255, 171, 64],
+      label: results.incluirPortaPavimento
+        ? `Porta de Pavimento (${results.folgaFrontal}mm: ${results.portaPavimentoMm}+${results.folgaEntrePortasMm}) e Folhas`
+        : `Porta Normal (${results.folgaFrontal}mm) e Folhas`,
+    },
     { color: [167, 243, 208], label: 'Montantes Frontais de Cabine (Retornos)' },
     { color: [0, 229, 255], label: 'Viga de Arcada / Guias e Chassis' },
     { color: [239, 68, 68], label: 'Cotas e Alinhamentos Limítrofes (LP e PP)' },

@@ -84,6 +84,7 @@ DIMENSÕES DA CABINE E PORTA:
 - Profundidade da Cabine: ${state.profundidadeCabine} mm
 - Lado de Instalação da Porta: ${results.nomeLadoPorta}
 - Vão Livre da Porta: ${state.aberturaPorta} mm
+- Tipo de Folga da Porta: ${results.incluirPortaPavimento ? `Porta de Pavimento (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} = ${results.folgaFrontal} mm no lugar de ${results.folgaFrontalBase} mm)` : `Porta Normal (${results.folgaFrontal} mm)`}
 - Espaço para Montantes Frontais: 2x ${results.montanteFrontalMm} mm (Total: ${results.diferencaPortaLadoMm} mm)
 - Validação Porta x Cabine: ${results.isPortaMenorQueLado ? 'CONFORME (Porta estritamente menor que a face da cabine)' : 'INCONSISTENTE (Porta >= face)'}
 
@@ -100,10 +101,11 @@ CONFIGURAÇÃO TÉCNICA:
 - Lado da Arcada / Chassis: ${state.ladoArcada}
 
 FOLGAS E SUPORTES ESTRUTURAIS:
-- Folga Necessária (Porta): ${results.folgaPorta} mm
+- Folga da Porta (Por Acesso): ${results.folgaFrontal} mm${results.incluirPortaPavimento ? ` (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)` : ' (Porta Normal)'}
+- Folgas por Parede do Poço: Frontal ${results.folgaFrontalParede} mm${results.hasFrontDoor ? ' [Porta]' : ''} | Fundo ${results.folgaFundoParede} mm${results.hasRearDoor ? ' [Porta]' : ''} | Esq. ${results.folgaEsquerda} mm${results.hasLeftDoor ? ' [Porta]' : ''} | Dir. ${results.folgaDireita} mm${results.hasRightDoor ? ' [Porta]' : ''}
+- Folga Necessária (Recolhimento): ${results.folgaPorta} mm
 - Espaço Chassis (L/S): ${results.espacoChassis} mm
-- Menor Folga Lateral: ${results.menorFolga} mm
-- Folga Frontal: ${results.folgaFrontal} mm
+- Menor Folga Lateral (Sem Porta): ${results.menorFolga} mm
 - Tipo de Suporte: ${results.tipoSuporte}
 - Quantidade por Andar: ${results.qtdSuporte} unidades
 =============================================
@@ -389,6 +391,18 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
               2× {results.montanteFrontalMm} mm (Total: {results.diferencaPortaLadoMm} mm)
             </span>
           </div>
+          <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+            <span className="text-slate-400">Folga de Instalação da Porta</span>
+            <span
+              className={`font-mono font-semibold ${
+                results.incluirPortaPavimento ? 'text-amber-300' : 'text-sky-300'
+              }`}
+            >
+              {results.incluirPortaPavimento
+                ? `Porta de Pavimento: ${results.folgaFrontal} mm (${results.portaPavimentoMm} + ${results.folgaEntrePortasMm})`
+                : `Porta Normal: ${results.folgaFrontal} mm`}
+            </span>
+          </div>
           <div className="flex items-center justify-between py-0.5">
             <span className="text-slate-400">Regra Construtiva</span>
             <span className="text-slate-300">
@@ -406,7 +420,45 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
           Folgas e Componentes Estruturais
         </div>
         <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
-          <span className="text-slate-400">Folga Necessária (Porta)</span>
+          <span className="text-slate-400">Folga da Porta (Por Acesso)</span>
+          <span className={`font-mono font-semibold ${results.incluirPortaPavimento ? 'text-amber-300' : 'text-sky-300'}`}>
+            {results.folgaFrontal} mm
+            <span className="text-[10px] text-slate-400 font-normal ml-1">
+              {results.incluirPortaPavimento
+                ? `(${results.portaPavimentoMm}+${results.folgaEntrePortasMm} no lugar de ${results.folgaFrontalBase})`
+                : '(Porta Normal)'}
+            </span>
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+          <span className="text-slate-400">Folgas no Eixo Y (Frontal / Fundo)</span>
+          <span className="font-mono text-slate-200">
+            <span className={results.hasFrontDoor ? 'text-amber-300 font-semibold' : ''}>
+              {results.folgaFrontalParede}mm{results.hasFrontDoor ? ' (P)' : ''}
+            </span>
+            {' / '}
+            <span className={results.hasRearDoor ? 'text-amber-300 font-semibold' : ''}>
+              {results.folgaFundoParede}mm{results.hasRearDoor ? ' (P)' : ''}
+            </span>
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+          <span className="text-slate-400">Folgas no Eixo X (Esq. / Dir.)</span>
+          <span className="font-mono text-slate-200">
+            <span className={results.hasLeftDoor ? 'text-amber-300 font-semibold' : ''}>
+              {results.folgaEsquerda}mm{results.hasLeftDoor ? ' (P)' : ''}
+            </span>
+            {' / '}
+            <span className={results.hasRightDoor ? 'text-amber-300 font-semibold' : ''}>
+              {results.folgaDireita}mm{results.hasRightDoor ? ' (P)' : ''}
+            </span>
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+          <span className="text-slate-400">Folga Necessária (Recolhimento)</span>
           <span className="font-mono font-semibold text-slate-200">
             {results.folgaPorta} mm
           </span>

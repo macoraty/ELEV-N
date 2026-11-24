@@ -4,9 +4,12 @@ export const CLEARANCES_STORAGE_KEY = 'elevator_user_clearances_v1';
 
 export const CLEARANCE_KEYS: (keyof ElevatorConfigState)[] = [
   'aberturaPorta',
+  'incluirPortaPavimento',
   'customMenorFolga',
   'customFolgaFrontal',
   'customFolgaFundo',
+  'customPortaPavimento',
+  'customFolgaEntrePortas',
   'baseChassisHidraulicoL',
   'baseChassisHidraulicoSuspensao',
   'baseChassisEletricoL',
