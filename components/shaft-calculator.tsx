@@ -9,6 +9,7 @@ import {
   LadoArcada,
   TipoEntrada,
   TipoPorta,
+  SentidoAberturaPorta,
   LadoInstalacaoPorta,
   calculatePossibleCabinsFromShaft,
   PossibleCabinOption,
@@ -16,11 +17,17 @@ import {
   ARCADAS,
   LADOS_ARCADA,
   TIPOS_ENTRADA,
-  TIPOS_PORTA,
+  SENTIDOS_ABERTURA_PORTA,
   LADOS_INSTALACAO_PORTA,
   ABERTURAS_PORTA,
   getMaiorAberturaValida,
   getFolgaPortaNormalPorTipo,
+  getTiposPortaPorSentido,
+  getSentidoCompativelTipoPorta,
+  getTipoPortaCompativelSentido,
+  calculateLarguraOcupadaPorta,
+  calculateShaftClearances,
+  checkDoorWallCollision,
   DEFAULT_PORTA_PAVIMENTO_MM,
   DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
@@ -148,6 +155,72 @@ export function ShaftCalculator({
   const aberturaNum = parseInt(currentAbertura, 10) || 700;
   const sobraMm = Math.max(0, ladoEfetivo - aberturaNum);
   const montanteMm = Math.max(0, Math.round(sobraMm / 2));
+
+  const sentidoAbertura: SentidoAberturaPorta = getSentidoCompativelTipoPorta(
+    shaftConfig.tipoPorta,
+    shaftConfig.sentidoAberturaPorta
+  );
+  const tiposPortaCompativeis = getTiposPortaPorSentido(sentidoAbertura);
+  const doorOccupied = calculateLarguraOcupadaPorta(
+    aberturaNum,
+    shaftConfig.tipoPorta,
+    sentidoAbertura
+  );
+  const shaftClearances = useMemo(() => {
+    return calculateShaftClearances({
+      acionamento: shaftConfig.acionamento,
+      arcada: shaftConfig.arcada,
+      ladoArcada: shaftConfig.ladoArcada,
+      tipoEntrada: shaftConfig.tipoEntrada,
+      tipoPorta: shaftConfig.tipoPorta,
+      ladoPorta: shaftConfig.ladoPorta,
+      incluirPortaPavimento: shaftConfig.incluirPortaPavimento,
+      customMenorFolga: customClearances?.customMenorFolga,
+      customFolgaFrontal: customClearances?.customFolgaFrontal,
+      customFolgaFundo: customClearances?.customFolgaFundo,
+      customPortaPavimento: customClearances?.customPortaPavimento,
+      customFolgaEntrePortas: customClearances?.customFolgaEntrePortas,
+      baseChassisHidraulicoL: customClearances?.baseChassisHidraulicoL,
+      baseChassisHidraulicoSuspensao: customClearances?.baseChassisHidraulicoSuspensao,
+      baseChassisEletricoL: customClearances?.baseChassisEletricoL,
+      baseChassisEletricoSuspensaoLateral: customClearances?.baseChassisEletricoSuspensaoLateral,
+      baseChassisEletricoSuspensaoFundo: customClearances?.baseChassisEletricoSuspensaoFundo,
+    });
+  }, [shaftConfig, customClearances]);
+
+  const doorWallCollision = checkDoorWallCollision({
+    larguraCabine: activeLargura,
+    profundidadeCabine: activeProfundidade,
+    larguraPoco: shaftConfig.larguraPoco,
+    profundidadePoco: shaftConfig.profundidadePoco,
+    aberturaMm: aberturaNum,
+    larguraOcupadaPortaMm: doorOccupied.larguraOcupadaMm,
+    recolhimentoMm: doorOccupied.recolhimentoMm,
+    sentidoAberturaPorta: sentidoAbertura,
+    ladoArcada: shaftConfig.ladoArcada,
+    folgaEsquerda: shaftClearances.folgaEsquerda,
+    folgaDireita: shaftClearances.folgaDireita,
+    folgaFrontalParede: shaftClearances.folgaFrontalParede,
+    folgaFundoParede: shaftClearances.folgaFundoParede,
+    hasFrontDoor: shaftClearances.hasFrontDoor,
+    hasRearDoor: shaftClearances.hasRearDoor,
+    hasRightDoor: shaftClearances.hasRightDoor,
+    hasLeftDoor: shaftClearances.hasLeftDoor,
+    incluirPortaPavimento,
+  });
+  const isLarguraPortaOk = !doorWallCollision.hasCollision;
+
+  const handleSentidoAberturaChange = (novoSentido: SentidoAberturaPorta) => {
+    const nextTipoPorta = incluirPortaPavimento
+      ? shaftConfig.tipoPorta
+      : getTipoPortaCompativelSentido(novoSentido, shaftConfig.tipoPorta);
+    onChange({
+      ...shaftConfig,
+      sentidoAberturaPorta: novoSentido,
+      tipoPorta: nextTipoPorta,
+      selectedCabinKey: null,
+    });
+  };
 
   // Handler para alterar o tamanho da porta
   const handleAberturaChange = (val: string) => {
@@ -566,6 +639,73 @@ export function ShaftCalculator({
             </span>
           </div>
 
+          {/* Sentido de Abertura da Porta (Direita / Esquerda / Central) */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
+              <span>Sentido de Abertura</span>
+              <span
+                className={`font-mono ${
+                  isLarguraPortaOk ? 'text-sky-400' : 'text-rose-400 font-bold'
+                }`}
+              >
+                {incluirPortaPavimento
+                  ? 'Bloqueado (P. Pavimento)'
+                  : `Ocupa: ${doorOccupied.larguraOcupadaMm} mm (${doorOccupied.formulaTexto})`}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {SENTIDOS_ABERTURA_PORTA.map((sentido) => {
+                const isActive = sentidoAbertura === sentido;
+                return (
+                  <button
+                    key={sentido}
+                    id={`btn-shaft-sentido-porta-${sentido.toLowerCase()}`}
+                    type="button"
+                    disabled={incluirPortaPavimento}
+                    onClick={() => handleSentidoAberturaChange(sentido)}
+                    className={`py-1 px-1.5 rounded border text-center text-[11px] transition-colors ${
+                      incluirPortaPavimento
+                        ? 'bg-slate-900/70 border-slate-800 text-slate-500 cursor-not-allowed opacity-70'
+                        : isActive && !isLarguraPortaOk
+                        ? 'border-rose-500 bg-rose-950/70 text-rose-200 font-semibold cursor-pointer'
+                        : isActive
+                        ? 'border-sky-500 bg-sky-950/50 text-sky-200 font-semibold cursor-pointer'
+                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 cursor-pointer'
+                    }`}
+                  >
+                    {sentido === 'Direita'
+                      ? 'Direita →'
+                      : sentido === 'Esquerda'
+                      ? '← Esquerda'
+                      : '← Central →'}
+                  </button>
+                );
+              })}
+            </div>
+            {!incluirPortaPavimento && doorWallCollision.hasCollision && (
+              <div className="mt-1.5 p-2 rounded-lg bg-rose-950/75 border border-rose-500/80 flex items-start gap-1.5 text-xs">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <div className="font-bold text-rose-200 text-[10px] leading-snug">
+                    COLISÃO COM A PAREDE DO POÇO ({doorWallCollision.colisaoMm} mm)!
+                  </div>
+                  <p className="text-[10px] text-rose-200/90 leading-snug">
+                    {doorWallCollision.alertaTexto}
+                  </p>
+                  {doorWallCollision.sugestaoSentido && (
+                    <button
+                      type="button"
+                      onClick={() => handleSentidoAberturaChange(doorWallCollision.sugestaoSentido!)}
+                      className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10px] font-semibold cursor-pointer transition-colors"
+                    >
+                      Inverter para {doorWallCollision.sugestaoSentido}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {/* Modelo de Porta */}
             <div>
@@ -585,13 +725,15 @@ export function ShaftCalculator({
                 id="select-shaft-tipo-porta"
                 value={shaftConfig.tipoPorta}
                 disabled={incluirPortaPavimento}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const novoTipo = e.target.value as TipoPorta;
                   onChange({
                     ...shaftConfig,
-                    tipoPorta: e.target.value as TipoPorta,
+                    tipoPorta: novoTipo,
+                    sentidoAberturaPorta: getSentidoCompativelTipoPorta(novoTipo, sentidoAbertura),
                     selectedCabinKey: null,
-                  })
-                }
+                  });
+                }}
                 title={
                   incluirPortaPavimento
                     ? 'Escolha bloqueada enquanto Porta de Pavimento estiver selecionada'
@@ -603,11 +745,12 @@ export function ShaftCalculator({
                     : 'bg-slate-950 border-slate-700 text-white focus:border-sky-500 cursor-pointer'
                 }`}
               >
-                {TIPOS_PORTA.map((t) => {
+                {tiposPortaCompativeis.map((t) => {
                   const info = getFolgaPortaNormalPorTipo(t);
+                  const occ = calculateLarguraOcupadaPorta(aberturaNum, t, sentidoAbertura);
                   return (
                     <option key={t} value={t}>
-                      {t} ({info.totalMm} mm)
+                      {t} ({occ.larguraOcupadaMm} mm · {info.totalMm} mm)
                     </option>
                   );
                 })}

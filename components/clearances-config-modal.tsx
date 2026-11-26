@@ -4,6 +4,7 @@ import {
   ElevatorConfigState,
   ABERTURAS_PORTA,
   getFolgaPortaNormalPorTipo,
+  calculateLarguraOcupadaPorta,
   DEFAULT_PORTA_PAVIMENTO_MM,
   DEFAULT_FOLGA_ENTRE_PORTAS_MM,
 } from '@/lib/elevator-calculator';
@@ -227,31 +228,15 @@ export function ClearancesConfigModal({
 
   const currentAbertura = state.aberturaPorta || '800';
   const aberturaMm = parseInt(currentAbertura, 10) || 700;
-  const indexAbertura = Math.max(0, Math.round((aberturaMm - 700) / 100));
 
-  // Folgas dinâmicas calculadas para cada modelo com base na abertura atual
-  const folga2FL = (state.basePorta2FL ?? 450) + indexAbertura * 60;
-  const folga3FL = (state.basePorta3FL ?? 320) + indexAbertura * 45;
-  const folga2FC = (state.basePorta2FC ?? 420) + indexAbertura * 50;
-  const folga4FC = (state.basePorta4FC ?? 280) + indexAbertura * 35;
-
-  let folgaPortaAtual = folga2FL;
-  switch (state.tipoPorta) {
-    case '2 Folhas Lateral':
-      folgaPortaAtual = folga2FL;
-      break;
-    case '3 Folhas Lateral':
-      folgaPortaAtual = folga3FL;
-      break;
-    case '2 Folhas Central':
-      folgaPortaAtual = folga2FC;
-      break;
-    case '4 Folhas Central':
-      folgaPortaAtual = folga4FC;
-      break;
-    default:
-      folgaPortaAtual = folga2FL;
-  }
+  // Largura ocupada pela porta calculada pelas fórmulas técnicas para cada modelo
+  const occ2FL = calculateLarguraOcupadaPorta(aberturaMm, '2 Folhas Lateral', 'Direita');
+  const occ3FL = calculateLarguraOcupadaPorta(aberturaMm, '3 Folhas Lateral', 'Direita');
+  const occ2FC = calculateLarguraOcupadaPorta(aberturaMm, '2 Folhas Central', 'Central');
+  const occ4FC = calculateLarguraOcupadaPorta(aberturaMm, '4 Folhas Central', 'Central');
+  const occ6FC = calculateLarguraOcupadaPorta(aberturaMm, '6 Folhas Central', 'Central');
+  const occAtual = calculateLarguraOcupadaPorta(aberturaMm, state.tipoPorta, state.sentidoAberturaPorta);
+  const folgaPortaAtual = occAtual.recolhimentoMm;
 
   // Verificação contra a face da cabine
   const ladoInstalacao = state.ladoPorta || 'Largura';
@@ -292,49 +277,6 @@ export function ClearancesConfigModal({
           {rawVal !== undefined && (
             <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded font-mono shrink-0">Modif.</span>
           )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderDoorInput = (
-    label: string,
-    stateKey: keyof ElevatorConfigState,
-    defaultVal: number,
-    efetivaVal: number,
-    acrescimo: number
-  ) => {
-    const rawVal = state[stateKey];
-    const val = typeof rawVal === 'number' || typeof rawVal === 'string' ? rawVal : '';
-    return (
-      <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg flex flex-col justify-between">
-        <div className="flex items-start justify-between mb-1">
-          <label className="block text-[11px] font-bold text-slate-300 leading-tight">
-            {label}
-          </label>
-          {rawVal !== undefined && (
-            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded font-mono shrink-0">
-              Modif.
-            </span>
-          )}
-        </div>
-        <div className="space-y-1.5 mt-auto">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 shrink-0">Base:</span>
-            <input
-              type="number"
-              value={val}
-              onChange={(e) => updateNum(stateKey, e.target.value)}
-              placeholder={`Padrão: ${defaultVal}`}
-              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] px-1.5 py-0.5 bg-slate-900/60 rounded border border-slate-800/60">
-            <span className="text-slate-400">Total c/ vão:</span>
-            <span className="font-mono font-bold text-cyan-400">
-              {efetivaVal} mm {acrescimo > 0 ? `(+${acrescimo})` : ''}
-            </span>
-          </div>
         </div>
       </div>
     );
@@ -486,22 +428,49 @@ export function ClearancesConfigModal({
                 </div>
               </div>
 
-              {/* Folga de Portas */}
+              {/* Largura Ocupada pela Porta por Modelo */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    Folga de Portas (Montantes e Mecanismo)
+                    Largura Ocupada pela Porta (Vão + Recolhimento)
                   </h3>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    Acréscimo proporcional ativo: +{indexAbertura * 50}mm aprox.
+                    Base vão atual: {aberturaMm} mm
                   </span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {renderDoorInput('2 Folhas Lateral', 'basePorta2FL', 450, folga2FL, indexAbertura * 60)}
-                  {renderDoorInput('3 Folhas Lateral', 'basePorta3FL', 320, folga3FL, indexAbertura * 45)}
-                  {renderDoorInput('2 Folhas Central', 'basePorta2FC', 420, folga2FC, indexAbertura * 50)}
-                  {renderDoorInput('4 Folhas Central', 'basePorta4FC', 280, folga4FC, indexAbertura * 35)}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    { nome: '2 Folhas Lateral (Dir/Esq)', occ: occ2FL, active: state.tipoPorta === '2 Folhas Lateral' },
+                    { nome: '3 Folhas Lateral (Dir/Esq)', occ: occ3FL, active: state.tipoPorta === '3 Folhas Lateral' },
+                    { nome: '2 Folhas Central', occ: occ2FC, active: state.tipoPorta === '2 Folhas Central' },
+                    { nome: '4 Folhas Central', occ: occ4FC, active: state.tipoPorta === '4 Folhas Central' },
+                    { nome: '6 Folhas Central', occ: occ6FC, active: state.tipoPorta === '6 Folhas Central' },
+                  ].map((item) => (
+                    <div
+                      key={item.nome}
+                      className={`p-2.5 rounded-lg border flex flex-col justify-between ${
+                        item.active
+                          ? 'bg-cyan-950/40 border-cyan-500/60'
+                          : 'bg-slate-950 border-slate-800'
+                      }`}
+                    >
+                      <span className="text-[10px] font-bold text-slate-200 leading-tight">
+                        {item.nome}
+                      </span>
+                      <div className="mt-2 space-y-0.5 font-mono">
+                        <div className="text-xs font-bold text-cyan-400">
+                          {item.occ.larguraOcupadaMm} mm
+                        </div>
+                        <div className="text-[9px] text-slate-400">
+                          {item.occ.formulaGeral}
+                        </div>
+                        <div className="text-[9px] text-slate-500">
+                          Recolh.: +{item.occ.recolhimentoMm} mm
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

@@ -5,7 +5,9 @@ export type TipoPorta =
   | '2 Folhas Lateral'
   | '3 Folhas Lateral'
   | '2 Folhas Central'
-  | '4 Folhas Central';
+  | '4 Folhas Central'
+  | '6 Folhas Central';
+export type SentidoAberturaPorta = 'Direita' | 'Esquerda' | 'Central';
 export type TipoEntrada = 'Unilateral' | 'Oposta' | 'Adjacente';
 export type LadoArcada = 'Lateral' | 'Fundo';
 export type LadoInstalacaoPorta = 'Largura' | 'Profundidade';
@@ -18,6 +20,12 @@ export const TIPOS_PORTA: TipoPorta[] = [
   '3 Folhas Lateral',
   '2 Folhas Central',
   '4 Folhas Central',
+  '6 Folhas Central',
+];
+export const SENTIDOS_ABERTURA_PORTA: SentidoAberturaPorta[] = [
+  'Direita',
+  'Esquerda',
+  'Central',
 ];
 export const TIPOS_ENTRADA: TipoEntrada[] = ['Unilateral', 'Oposta', 'Adjacente'];
 export const LADOS_ARCADA: LadoArcada[] = ['Lateral', 'Fundo'];
@@ -75,6 +83,13 @@ export const FOLGA_PORTA_NORMAL_POR_TIPO: Record<TipoPorta, DoorClearanceBreakdo
     totalMm: 210,
     formula: '90+30+90',
   },
+  '6 Folhas Central': {
+    folhaCabineMm: 136,
+    folgaEntrePortasMm: 30,
+    folhaPavimentoMm: 136,
+    totalMm: 302,
+    formula: '136+30+136',
+  },
 };
 
 export function getFolgaPortaNormalPorTipo(tipoPorta?: TipoPorta): DoorClearanceBreakdown {
@@ -82,6 +97,308 @@ export function getFolgaPortaNormalPorTipo(tipoPorta?: TipoPorta): DoorClearance
     return FOLGA_PORTA_NORMAL_POR_TIPO[tipoPorta];
   }
   return FOLGA_PORTA_NORMAL_POR_TIPO['2 Folhas Lateral'];
+}
+
+export function getTiposPortaPorSentido(sentido: SentidoAberturaPorta): TipoPorta[] {
+  if (sentido === 'Central') {
+    return ['2 Folhas Central', '4 Folhas Central', '6 Folhas Central'];
+  }
+  return ['2 Folhas Lateral', '3 Folhas Lateral'];
+}
+
+export function getSentidoCompativelTipoPorta(
+  tipoPorta: TipoPorta,
+  sentidoAtual?: SentidoAberturaPorta
+): SentidoAberturaPorta {
+  if (tipoPorta.includes('Central')) {
+    return 'Central';
+  }
+  return sentidoAtual === 'Esquerda' ? 'Esquerda' : 'Direita';
+}
+
+export function getTipoPortaCompativelSentido(
+  sentido: SentidoAberturaPorta,
+  tipoAtual: TipoPorta
+): TipoPorta {
+  const validos = getTiposPortaPorSentido(sentido);
+  if (validos.includes(tipoAtual)) return tipoAtual;
+  if (sentido === 'Central') {
+    return tipoAtual === '3 Folhas Lateral' ? '6 Folhas Central' : '4 Folhas Central';
+  }
+  return tipoAtual === '6 Folhas Central' ? '3 Folhas Lateral' : '2 Folhas Lateral';
+}
+
+export interface DoorOccupiedWidthInfo {
+  larguraOcupadaMm: number;
+  recolhimentoMm: number;
+  fator: number;
+  acrescimoMm: number;
+  formulaTexto: string;
+  formulaGeral: string;
+  sentidoEfetivo: SentidoAberturaPorta;
+}
+
+export function calculateLarguraOcupadaPorta(
+  aberturaMm: number,
+  tipoPorta: TipoPorta,
+  sentido?: SentidoAberturaPorta
+): DoorOccupiedWidthInfo {
+  const sentidoEfetivo = getSentidoCompativelTipoPorta(tipoPorta, sentido);
+  let fator = 1.5;
+  let acrescimoMm = 50;
+  let fatorLabel = '1,5';
+
+  switch (tipoPorta) {
+    case '3 Folhas Lateral':
+      fator = 1.33;
+      acrescimoMm = 50;
+      fatorLabel = '1,33';
+      break;
+    case '2 Folhas Lateral':
+      fator = 1.5;
+      acrescimoMm = 50;
+      fatorLabel = '1,5';
+      break;
+    case '4 Folhas Central':
+      fator = 1.5;
+      acrescimoMm = 100;
+      fatorLabel = '1,5';
+      break;
+    case '6 Folhas Central':
+      fator = 1.3;
+      acrescimoMm = 100;
+      fatorLabel = '1,3';
+      break;
+    case '2 Folhas Central':
+      fator = 2.0;
+      acrescimoMm = 100;
+      fatorLabel = '2,0';
+      break;
+  }
+
+  const larguraOcupadaMm = Math.round(fator * aberturaMm + acrescimoMm);
+  const recolhimentoMm = Math.max(0, larguraOcupadaMm - aberturaMm);
+
+  return {
+    larguraOcupadaMm,
+    recolhimentoMm,
+    fator,
+    acrescimoMm,
+    formulaTexto: `${fatorLabel} × ${aberturaMm} + ${acrescimoMm}`,
+    formulaGeral: `${fatorLabel} × L + ${acrescimoMm}`,
+    sentidoEfetivo,
+  };
+}
+
+export interface DoorWallCollisionInput {
+  larguraCabine: number;
+  profundidadeCabine: number;
+  larguraPoco: number;
+  profundidadePoco: number;
+  aberturaMm: number;
+  larguraOcupadaPortaMm: number;
+  recolhimentoMm: number;
+  sentidoAberturaPorta: SentidoAberturaPorta;
+  ladoArcada: LadoArcada;
+  folgaEsquerda: number;
+  folgaDireita: number;
+  folgaFrontalParede: number;
+  folgaFundoParede: number;
+  hasFrontDoor: boolean;
+  hasRearDoor: boolean;
+  hasRightDoor: boolean;
+  hasLeftDoor: boolean;
+  incluirPortaPavimento?: boolean;
+}
+
+export interface DoorWallCollisionResult {
+  hasCollision: boolean;
+  colisaoMm: number;
+  espacoDisponivelMm: number;
+  recolhimentoNecessarioMm: number;
+  sugestaoSentido?: SentidoAberturaPorta;
+  alertaTexto?: string;
+}
+
+export function checkDoorWallCollision(input: DoorWallCollisionInput): DoorWallCollisionResult {
+  const {
+    larguraCabine,
+    profundidadeCabine,
+    larguraPoco,
+    profundidadePoco,
+    aberturaMm,
+    larguraOcupadaPortaMm,
+    recolhimentoMm,
+    sentidoAberturaPorta,
+    ladoArcada,
+    folgaEsquerda,
+    folgaDireita,
+    folgaFrontalParede,
+    folgaFundoParede,
+    hasFrontDoor,
+    hasRearDoor,
+    hasRightDoor,
+    hasLeftDoor,
+    incluirPortaPavimento = false,
+  } = input;
+
+  if (incluirPortaPavimento || recolhimentoMm <= 0) {
+    return {
+      hasCollision: false,
+      colisaoMm: 0,
+      espacoDisponivelMm: Math.max(larguraPoco, profundidadePoco),
+      recolhimentoNecessarioMm: 0,
+    };
+  }
+
+  // Posição exata da cabine dentro do poço (espelha 1-a-1 a geometria da planta baixa)
+  let cabLeftMm: number;
+  let cabTopMm: number;
+
+  if (ladoArcada === 'Lateral') {
+    cabLeftMm =
+      folgaEsquerda + larguraCabine <= larguraPoco
+        ? folgaEsquerda
+        : Math.max(0, (larguraPoco - larguraCabine) / 2);
+    if (hasFrontDoor) {
+      const targetBottom = profundidadePoco - folgaFrontalParede;
+      cabTopMm =
+        targetBottom - profundidadeCabine >= 0
+          ? targetBottom - profundidadeCabine
+          : Math.max(0, (profundidadePoco - profundidadeCabine) / 2);
+    } else {
+      cabTopMm = Math.max(0, (profundidadePoco - profundidadeCabine) / 2);
+    }
+  } else {
+    if (hasRightDoor && !hasLeftDoor) {
+      const candidate = larguraPoco - folgaDireita - larguraCabine;
+      cabLeftMm = candidate >= 0 ? candidate : Math.max(0, (larguraPoco - larguraCabine) / 2);
+    } else if (hasLeftDoor && !hasRightDoor) {
+      cabLeftMm =
+        folgaEsquerda + larguraCabine <= larguraPoco
+          ? folgaEsquerda
+          : Math.max(0, (larguraPoco - larguraCabine) / 2);
+    } else {
+      cabLeftMm = Math.max(0, (larguraPoco - larguraCabine) / 2);
+    }
+    cabTopMm =
+      folgaFundoParede + profundidadeCabine <= profundidadePoco
+        ? folgaFundoParede
+        : Math.max(0, (profundidadePoco - profundidadeCabine) / 2);
+  }
+
+  const cabRightSpaceMm = Math.max(0, larguraPoco - (cabLeftMm + larguraCabine));
+  const cabBottomSpaceMm = Math.max(0, profundidadePoco - (cabTopMm + profundidadeCabine));
+
+  const evaluateAxis = (
+    sentido: SentidoAberturaPorta,
+    espacoNeg: number,
+    espacoPos: number
+  ) => {
+    if (sentido === 'Direita') {
+      const colisao = Math.max(0, Math.round(recolhimentoMm - espacoPos));
+      return {
+        colisao,
+        espacoDisp: Math.round(espacoPos),
+        necessario: Math.round(recolhimentoMm),
+      };
+    }
+    if (sentido === 'Esquerda') {
+      const colisao = Math.max(0, Math.round(recolhimentoMm - espacoNeg));
+      return {
+        colisao,
+        espacoDisp: Math.round(espacoNeg),
+        necessario: Math.round(recolhimentoMm),
+      };
+    }
+    const halfReq = recolhimentoMm / 2;
+    const colNeg = Math.max(0, Math.round(halfReq - espacoNeg));
+    const colPos = Math.max(0, Math.round(halfReq - espacoPos));
+    const colisao = Math.max(colNeg, colPos);
+    const espacoDisp = Math.round(colNeg >= colPos ? espacoNeg : espacoPos);
+    return {
+      colisao,
+      espacoDisp,
+      necessario: Math.round(halfReq),
+    };
+  };
+
+  const axesToCheck: Array<{ espacoNeg: number; espacoPos: number; wallSize: number }> = [];
+  if (hasFrontDoor || hasRearDoor) {
+    const montanteX = Math.max(0, (larguraCabine - aberturaMm) / 2);
+    axesToCheck.push({
+      espacoNeg: cabLeftMm + montanteX,
+      espacoPos: cabRightSpaceMm + montanteX,
+      wallSize: larguraPoco,
+    });
+  }
+  if (hasRightDoor || hasLeftDoor) {
+    const montanteY = Math.max(0, (profundidadeCabine - aberturaMm) / 2);
+    axesToCheck.push({
+      espacoNeg: cabTopMm + montanteY,
+      espacoPos: cabBottomSpaceMm + montanteY,
+      wallSize: profundidadePoco,
+    });
+  }
+
+  let worstColisao = 0;
+  let worstEspacoDisp = 0;
+  let worstNecessario = Math.round(
+    sentidoAberturaPorta === 'Central' ? recolhimentoMm / 2 : recolhimentoMm
+  );
+
+  for (const axis of axesToCheck) {
+    const check = evaluateAxis(sentidoAberturaPorta, axis.espacoNeg, axis.espacoPos);
+    const totalWallOverflow = Math.max(0, Math.round(larguraOcupadaPortaMm - axis.wallSize));
+    const axisColisao = Math.max(check.colisao, totalWallOverflow);
+    if (axisColisao > worstColisao) {
+      worstColisao = axisColisao;
+      worstEspacoDisp = check.espacoDisp;
+      worstNecessario = check.necessario;
+    } else if (worstColisao === 0 && worstEspacoDisp === 0) {
+      worstEspacoDisp = check.espacoDisp;
+      worstNecessario = check.necessario;
+    }
+  }
+
+  if (worstColisao <= 0) {
+    return {
+      hasCollision: false,
+      colisaoMm: 0,
+      espacoDisponivelMm: worstEspacoDisp,
+      recolhimentoNecessarioMm: worstNecessario,
+    };
+  }
+
+  // Verifica se inverter o sentido lateral (Direita <-> Esquerda) resolve a colisão
+  let sugestaoSentido: SentidoAberturaPorta | undefined;
+  if (sentidoAberturaPorta === 'Direita' || sentidoAberturaPorta === 'Esquerda') {
+    const oposto: SentidoAberturaPorta =
+      sentidoAberturaPorta === 'Direita' ? 'Esquerda' : 'Direita';
+    const opostoCabe = axesToCheck.every((axis) => {
+      const c = evaluateAxis(oposto, axis.espacoNeg, axis.espacoPos);
+      return c.colisao === 0 && larguraOcupadaPortaMm <= axis.wallSize;
+    });
+    if (opostoCabe) {
+      sugestaoSentido = oposto;
+    }
+  }
+
+  const ladoTexto =
+    sentidoAberturaPorta === 'Central'
+      ? `Abertura Central precisa de ${worstNecessario} mm de cada lado`
+      : `Abertura para ${sentidoAberturaPorta} precisa de ${worstNecessario} mm de recolhimento`;
+
+  const alertaTexto = `COLISÃO COM A PAREDE DO POÇO! ${ladoTexto}, mas há apenas ${worstEspacoDisp} mm disponíveis até a parede (ultrapassa ${worstColisao} mm). Revise o sentido de abertura da porta ou o lado da arcada.`;
+
+  return {
+    hasCollision: true,
+    colisaoMm: worstColisao,
+    espacoDisponivelMm: worstEspacoDisp,
+    recolhimentoNecessarioMm: worstNecessario,
+    sugestaoSentido,
+    alertaTexto,
+  };
 }
 
 export interface ElevatorConfigState {
@@ -93,6 +410,7 @@ export interface ElevatorConfigState {
   arcada: Arcada;
   posicao: Posicao;
   tipoPorta: TipoPorta;
+  sentidoAberturaPorta?: SentidoAberturaPorta;
   tipoEntrada: TipoEntrada;
   ladoArcada: LadoArcada;
   incluirPortaPavimento?: boolean;
@@ -121,6 +439,7 @@ export interface ShaftConfigState {
   arcada: Arcada;
   posicao: Posicao;
   tipoPorta: TipoPorta;
+  sentidoAberturaPorta?: SentidoAberturaPorta;
   tipoEntrada: TipoEntrada;
   ladoArcada: LadoArcada;
   ladoPorta: LadoInstalacaoPorta;
@@ -136,6 +455,7 @@ export const INITIAL_SHAFT_STATE: ShaftConfigState = {
   arcada: 'L',
   posicao: 'Centralizado',
   tipoPorta: '2 Folhas Lateral',
+  sentidoAberturaPorta: 'Direita',
   tipoEntrada: 'Unilateral',
   ladoArcada: 'Lateral',
   ladoPorta: 'Largura',
@@ -187,7 +507,7 @@ export interface ElevatorCalculationResults {
   cargaMinimaInterpoladaKg: number;
   areaMaxPermitidaM2: number;
   normaCarga: string;
-  // Validação da Porta x Lado da Cabine
+  // Validação da Porta x Lado da Cabine e Largura Ocupada pela Porta
   ladoFacePortaMm: number;
   nomeLadoPorta: string;
   isPortaMenorQueLado: boolean;
@@ -195,6 +515,18 @@ export interface ElevatorCalculationResults {
   montanteFrontalMm: number;
   maxAberturaSugeridaMm: number;
   erroValidacaoPorta?: string;
+  sentidoAberturaPorta: SentidoAberturaPorta;
+  larguraOcupadaPortaMm: number;
+  larguraOcupadaPortaFormula: string;
+  paredePocoPortaMm: number;
+  isLarguraPortaCompativelPoco: boolean;
+  isColisaoParedePorta: boolean;
+  colisaoParedePortaMm: number;
+  espacoDisponivelRecolhimentoMm: number;
+  recolhimentoNecessarioMm: number;
+  sugestaoSentidoPorta?: SentidoAberturaPorta;
+  sobraLarguraPortaPocoMm: number;
+  alertaLarguraOcupadaPorta?: string;
   isForaDaNorma?: boolean;
   alertaNormativo?: string;
 }
@@ -348,6 +680,7 @@ export const INITIAL_STATE: ElevatorConfigState = {
   arcada: 'L',
   posicao: 'Centralizado',
   tipoPorta: '2 Folhas Lateral',
+  sentidoAberturaPorta: 'Direita',
   tipoEntrada: 'Unilateral',
   ladoArcada: 'Lateral',
   incluirPortaPavimento: false,
@@ -444,26 +777,15 @@ export function calculateElevator(
     : undefined;
   
   const aberturaMm = parseInt(state.aberturaPorta, 10) || 700;
-  // Índice de degrau baseado em 700 mm com passos de 100 mm (0 para 700, 1 para 800, etc.)
-  const indexAbertura = Math.max(0, Math.round((aberturaMm - 700) / 100));
-
-  let folgaPorta = 450;
-  switch (state.tipoPorta) {
-    case '2 Folhas Lateral':
-      folgaPorta = (state.basePorta2FL ?? 450) + indexAbertura * 60;
-      break;
-    case '3 Folhas Lateral':
-      folgaPorta = (state.basePorta3FL ?? 320) + indexAbertura * 45;
-      break;
-    case '2 Folhas Central':
-      folgaPorta = (state.basePorta2FC ?? 420) + indexAbertura * 50;
-      break;
-    case '4 Folhas Central':
-      folgaPorta = (state.basePorta4FC ?? 280) + indexAbertura * 35;
-      break;
-    default:
-      folgaPorta = 450;
-  }
+  const doorOccupied = calculateLarguraOcupadaPorta(
+    aberturaMm,
+    state.tipoPorta,
+    state.sentidoAberturaPorta
+  );
+  const folgaPorta = doorOccupied.recolhimentoMm;
+  const larguraOcupadaPortaMm = doorOccupied.larguraOcupadaMm;
+  const larguraOcupadaPortaFormula = doorOccupied.formulaTexto;
+  const sentidoAberturaPorta = doorOccupied.sentidoEfetivo;
 
   const ladoInstalacao: LadoInstalacaoPorta = state.ladoPorta || 'Largura';
   const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
@@ -550,6 +872,39 @@ export function calculateElevator(
     ? `A porta (${aberturaNum} mm) excede o limite da face da cabine (${ladoEfetivoPortaMm} mm). A abertura máxima permitida é de até ${ladoEfetivoPortaMm} mm.`
     : undefined;
 
+  const paredePocoPortaMm =
+    state.tipoEntrada === 'Adjacente'
+      ? Math.min(larguraPoco, profundidadePoco)
+      : ladoInstalacao === 'Profundidade'
+      ? profundidadePoco
+      : larguraPoco;
+  const sobraLarguraPortaPocoMm = paredePocoPortaMm - larguraOcupadaPortaMm;
+
+  const doorWallCollision = checkDoorWallCollision({
+    larguraCabine: largura,
+    profundidadeCabine: profundidade,
+    larguraPoco,
+    profundidadePoco,
+    aberturaMm,
+    larguraOcupadaPortaMm,
+    recolhimentoMm: folgaPorta,
+    sentidoAberturaPorta,
+    ladoArcada: state.ladoArcada,
+    folgaEsquerda,
+    folgaDireita,
+    folgaFrontalParede,
+    folgaFundoParede,
+    hasFrontDoor,
+    hasRearDoor,
+    hasRightDoor,
+    hasLeftDoor,
+    incluirPortaPavimento,
+  });
+
+  const isColisaoParedePorta = doorWallCollision.hasCollision;
+  const isLarguraPortaCompativelPoco = !isColisaoParedePorta;
+  const alertaLarguraOcupadaPorta = doorWallCollision.alertaTexto;
+
   return {
     larguraPoco,
     profundidadePoco,
@@ -593,6 +948,18 @@ export function calculateElevator(
     montanteFrontalMm,
     maxAberturaSugeridaMm,
     erroValidacaoPorta,
+    sentidoAberturaPorta,
+    larguraOcupadaPortaMm,
+    larguraOcupadaPortaFormula,
+    paredePocoPortaMm,
+    isLarguraPortaCompativelPoco,
+    isColisaoParedePorta,
+    colisaoParedePortaMm: doorWallCollision.colisaoMm,
+    espacoDisponivelRecolhimentoMm: doorWallCollision.espacoDisponivelMm,
+    recolhimentoNecessarioMm: doorWallCollision.recolhimentoNecessarioMm,
+    sugestaoSentidoPorta: doorWallCollision.sugestaoSentido,
+    sobraLarguraPortaPocoMm,
+    alertaLarguraOcupadaPorta,
     isForaDaNorma,
     alertaNormativo,
   };

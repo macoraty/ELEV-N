@@ -164,6 +164,7 @@ export default function ElevatorConfiguratorPage() {
       arcada: shaftConfig.arcada,
       posicao: shaftConfig.posicao,
       tipoPorta: shaftConfig.tipoPorta,
+      sentidoAberturaPorta: shaftConfig.sentidoAberturaPorta,
       tipoEntrada: shaftConfig.tipoEntrada,
       ladoArcada: shaftConfig.ladoArcada,
       incluirPortaPavimento: shaftConfig.incluirPortaPavimento,

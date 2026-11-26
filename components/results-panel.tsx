@@ -96,14 +96,15 @@ CONFIGURAÇÃO TÉCNICA:
 - Acionamento: ${state.acionamento}
 - Tipo de Arcada: ${state.arcada}
 - Posição do Chassis: ${state.posicao}
-- Tipo de Porta: ${state.tipoPorta}
+- Tipo de Porta: ${state.tipoPorta} (${results.sentidoAberturaPorta})
+- Largura Ocupada pela Porta: ${results.larguraOcupadaPortaMm} mm (${results.larguraOcupadaPortaFormula}) — Parede Poço: ${results.paredePocoPortaMm} mm (${results.isLarguraPortaCompativelPoco ? 'CONFORME' : 'EXCEDE'})
 - Tipo de Entrada: ${state.tipoEntrada}
 - Lado da Arcada / Chassis: ${state.ladoArcada}
 
 FOLGAS E SUPORTES ESTRUTURAIS:
 - Folga da Porta (Por Acesso): ${results.folgaFrontal} mm${results.incluirPortaPavimento ? ` (Porta de Pavimento: ${results.portaPavimentoMm} + ${results.folgaEntrePortasMm} mm no lugar de ${results.folgaFrontalBase} mm)` : ` (Porta Normal — ${state.tipoPorta}: ${results.folgaPortaNormalFormula})`}
 - Folgas por Parede do Poço: Frontal ${results.folgaFrontalParede} mm${results.hasFrontDoor ? ' [Porta]' : ''} | Fundo ${results.folgaFundoParede} mm${results.hasRearDoor ? ' [Porta]' : ''} | Esq. ${results.folgaEsquerda} mm${results.hasLeftDoor ? ' [Porta]' : ''} | Dir. ${results.folgaDireita} mm${results.hasRightDoor ? ' [Porta]' : ''}
-- Folga Necessária (Recolhimento): ${results.folgaPorta} mm
+- Largura Ocupada / Recolhimento da Porta: ${results.larguraOcupadaPortaMm} mm (Recolhimento: +${results.folgaPorta} mm)
 - Espaço Chassis (L/S): ${results.espacoChassis} mm
 - Menor Folga Lateral (Sem Porta): ${results.menorFolga} mm
 - Tipo de Suporte: ${results.tipoSuporte}
@@ -403,6 +404,27 @@ Gerado via Configurador de Elevador Web (ABNT NBR 16858-1)
                 : `Porta Normal: ${results.folgaFrontal} mm (${results.folgaPortaNormalFormula})`}
             </span>
           </div>
+          <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+            <span className="text-slate-400">Abertura & Modelo</span>
+            <span className="font-mono font-semibold text-slate-200">
+              {state.tipoPorta} ({results.sentidoAberturaPorta})
+            </span>
+          </div>
+          <div className="flex items-center justify-between py-0.5 border-b border-slate-800/40">
+            <span className="text-slate-400">Largura Ocupada pela Porta</span>
+            <span
+              className={`font-mono font-semibold ${
+                results.isColisaoParedePorta ? 'text-rose-400 font-bold' : 'text-cyan-300'
+              }`}
+            >
+              {results.larguraOcupadaPortaMm} mm ({results.larguraOcupadaPortaFormula})
+            </span>
+          </div>
+          {results.alertaLarguraOcupadaPorta && (
+            <div className="my-1.5 p-2 rounded-lg bg-rose-950/75 border border-rose-500/80 text-[10px] text-rose-200 font-medium leading-snug">
+              ⚠ {results.alertaLarguraOcupadaPorta}
+            </div>
+          )}
           <div className="flex items-center justify-between py-0.5">
             <span className="text-slate-400">Regra Construtiva</span>
             <span className="text-slate-300">

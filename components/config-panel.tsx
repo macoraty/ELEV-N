@@ -7,13 +7,14 @@ import {
   Arcada,
   Posicao,
   TipoPorta,
+  SentidoAberturaPorta,
   TipoEntrada,
   LadoArcada,
   LadoInstalacaoPorta,
   ACIONAMENTOS,
   ARCADAS,
   POSICOES,
-  TIPOS_PORTA,
+  SENTIDOS_ABERTURA_PORTA,
   TIPOS_ENTRADA,
   LADOS_ARCADA,
   LADOS_INSTALACAO_PORTA,
@@ -21,6 +22,11 @@ import {
   getMaiorAberturaValida,
   calculateShaftClearances,
   getFolgaPortaNormalPorTipo,
+  getTiposPortaPorSentido,
+  getSentidoCompativelTipoPorta,
+  getTipoPortaCompativelSentido,
+  calculateLarguraOcupadaPorta,
+  checkDoorWallCollision,
   ShaftConfigState,
   INITIAL_SHAFT_STATE,
   DEFAULT_PORTA_PAVIMENTO_MM,
@@ -80,8 +86,16 @@ export function ConfigPanel({
       tipoPorta: state.tipoPorta,
       ladoPorta: state.ladoPorta,
       incluirPortaPavimento: state.incluirPortaPavimento,
+      customMenorFolga: state.customMenorFolga,
+      customFolgaFrontal: state.customFolgaFrontal,
+      customFolgaFundo: state.customFolgaFundo,
       customPortaPavimento: state.customPortaPavimento,
       customFolgaEntrePortas: state.customFolgaEntrePortas,
+      baseChassisHidraulicoL: state.baseChassisHidraulicoL,
+      baseChassisHidraulicoSuspensao: state.baseChassisHidraulicoSuspensao,
+      baseChassisEletricoL: state.baseChassisEletricoL,
+      baseChassisEletricoSuspensaoLateral: state.baseChassisEletricoSuspensaoLateral,
+      baseChassisEletricoSuspensaoFundo: state.baseChassisEletricoSuspensaoFundo,
     });
   }, [
     state.acionamento,
@@ -91,8 +105,16 @@ export function ConfigPanel({
     state.tipoPorta,
     state.ladoPorta,
     state.incluirPortaPavimento,
+    state.customMenorFolga,
+    state.customFolgaFrontal,
+    state.customFolgaFundo,
     state.customPortaPavimento,
     state.customFolgaEntrePortas,
+    state.baseChassisHidraulicoL,
+    state.baseChassisHidraulicoSuspensao,
+    state.baseChassisEletricoL,
+    state.baseChassisEletricoSuspensaoLateral,
+    state.baseChassisEletricoSuspensaoFundo,
   ]);
 
   const incluirPortaPavimento = state.incluirPortaPavimento ?? false;
@@ -119,6 +141,54 @@ export function ConfigPanel({
   const diferencaMm = ladoEfetivo - aberturaNum;
   const montanteMm = Math.max(0, Math.round(diferencaMm / 2));
   const maxAberturaSugerida = getMaiorAberturaValida(ladoEfetivo);
+
+  const sentidoAbertura: SentidoAberturaPorta = getSentidoCompativelTipoPorta(
+    state.tipoPorta,
+    state.sentidoAberturaPorta
+  );
+  const tiposPortaCompativeis = getTiposPortaPorSentido(sentidoAbertura);
+  const doorOccupied = calculateLarguraOcupadaPorta(aberturaNum, state.tipoPorta, sentidoAbertura);
+  const larguraPocoEstimada = larguraNum + defaultClearances.espacoFixoLargura;
+  const profundidadePocoEstimada = profundidadeNum + defaultClearances.espacoFixoProfundidade;
+  const paredePocoPortaEstimada =
+    state.tipoEntrada === 'Adjacente'
+      ? Math.min(larguraPocoEstimada, profundidadePocoEstimada)
+      : ladoInstalacao === 'Profundidade'
+      ? profundidadePocoEstimada
+      : larguraPocoEstimada;
+
+  const doorWallCollision = checkDoorWallCollision({
+    larguraCabine: larguraNum,
+    profundidadeCabine: profundidadeNum,
+    larguraPoco: larguraPocoEstimada,
+    profundidadePoco: profundidadePocoEstimada,
+    aberturaMm: aberturaNum,
+    larguraOcupadaPortaMm: doorOccupied.larguraOcupadaMm,
+    recolhimentoMm: doorOccupied.recolhimentoMm,
+    sentidoAberturaPorta: sentidoAbertura,
+    ladoArcada: state.ladoArcada,
+    folgaEsquerda: defaultClearances.folgaEsquerda,
+    folgaDireita: defaultClearances.folgaDireita,
+    folgaFrontalParede: defaultClearances.folgaFrontalParede,
+    folgaFundoParede: defaultClearances.folgaFundoParede,
+    hasFrontDoor: defaultClearances.hasFrontDoor,
+    hasRearDoor: defaultClearances.hasRearDoor,
+    hasRightDoor: defaultClearances.hasRightDoor,
+    hasLeftDoor: defaultClearances.hasLeftDoor,
+    incluirPortaPavimento,
+  });
+  const isLarguraPortaOk = !doorWallCollision.hasCollision;
+
+  const handleSentidoAberturaChange = (novoSentido: SentidoAberturaPorta) => {
+    const nextTipoPorta = incluirPortaPavimento
+      ? state.tipoPorta
+      : getTipoPortaCompativelSentido(novoSentido, state.tipoPorta);
+    onChange({
+      ...state,
+      sentidoAberturaPorta: novoSentido,
+      tipoPorta: nextTipoPorta,
+    });
+  };
 
   const updateField = <K extends keyof ElevatorConfigState>(
     field: K,
@@ -576,6 +646,74 @@ export function ConfigPanel({
             </select>
           </div>
 
+          {/* Sentido de Abertura da Porta (Direita / Esquerda / Central) */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-300 mb-1">
+              <span>Sentido de Abertura da Porta</span>
+              <span
+                className={`text-[10px] font-mono ${
+                  isLarguraPortaOk ? 'text-cyan-400' : 'text-rose-400 font-bold'
+                }`}
+              >
+                Largura ocupada: {doorOccupied.larguraOcupadaMm} mm ({doorOccupied.formulaTexto})
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {SENTIDOS_ABERTURA_PORTA.map((sentido) => {
+                const isActive = sentidoAbertura === sentido;
+                return (
+                  <button
+                    key={sentido}
+                    id={`btn-sentido-porta-${sentido.toLowerCase()}`}
+                    type="button"
+                    disabled={incluirPortaPavimento}
+                    onClick={() => handleSentidoAberturaChange(sentido)}
+                    className={`py-1.5 px-2 rounded-lg border text-center text-xs font-semibold transition-all ${
+                      incluirPortaPavimento
+                        ? 'bg-slate-900/70 border-slate-800 text-slate-500 cursor-not-allowed opacity-70'
+                        : isActive && !isLarguraPortaOk
+                        ? 'bg-rose-950/70 border-rose-500 text-rose-200 shadow-sm cursor-pointer'
+                        : isActive
+                        ? 'bg-cyan-950/60 border-cyan-500 text-cyan-100 shadow-sm cursor-pointer'
+                        : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700 cursor-pointer'
+                    }`}
+                  >
+                    {sentido === 'Direita'
+                      ? 'Direita →'
+                      : sentido === 'Esquerda'
+                      ? '← Esquerda'
+                      : '← Central →'}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Alerta Vermelho de Colisão com a Parede do Poço */}
+            {!incluirPortaPavimento && doorWallCollision.hasCollision && (
+              <div className="mt-2 p-2.5 rounded-lg bg-rose-950/75 border border-rose-500/80 flex items-start gap-2 text-xs shadow-sm">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="font-bold text-rose-200 text-[11px] leading-snug">
+                    COLISÃO COM A PAREDE DO POÇO ({doorWallCollision.colisaoMm} mm)!
+                  </div>
+                  <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                    {doorWallCollision.alertaTexto}
+                  </p>
+                  {doorWallCollision.sugestaoSentido && (
+                    <button
+                      type="button"
+                      onClick={() => handleSentidoAberturaChange(doorWallCollision.sugestaoSentido!)}
+                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                    >
+                      <ArrowRightLeft className="w-3 h-3" />
+                      <span>Inverter para {doorWallCollision.sugestaoSentido}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Tipo de Porta */}
           <div>
             <label
@@ -594,7 +732,14 @@ export function ConfigPanel({
               id="select-tipo-porta"
               value={state.tipoPorta}
               disabled={incluirPortaPavimento}
-              onChange={(e) => updateField('tipoPorta', e.target.value as TipoPorta)}
+              onChange={(e) => {
+                const novoTipo = e.target.value as TipoPorta;
+                onChange({
+                  ...state,
+                  tipoPorta: novoTipo,
+                  sentidoAberturaPorta: getSentidoCompativelTipoPorta(novoTipo, sentidoAbertura),
+                });
+              }}
               title={
                 incluirPortaPavimento
                   ? 'Escolha bloqueada enquanto Porta de Pavimento estiver selecionada'
@@ -603,21 +748,34 @@ export function ConfigPanel({
               className={`w-full px-2.5 py-1.5 border rounded-lg text-xs transition-colors ${
                 incluirPortaPavimento
                   ? 'bg-slate-900/70 border-slate-800 text-slate-500 cursor-not-allowed opacity-70'
+                  : !isLarguraPortaOk
+                  ? 'bg-rose-950/40 border-rose-500 text-rose-100 focus:border-rose-400'
                   : 'bg-slate-950 border-slate-700 focus:border-cyan-400 text-slate-100'
               }`}
             >
-              {TIPOS_PORTA.map((op) => {
+              {tiposPortaCompativeis.map((op) => {
                 const info = getFolgaPortaNormalPorTipo(op);
+                const occ = calculateLarguraOcupadaPorta(aberturaNum, op, sentidoAbertura);
                 return (
                   <option key={op} value={op}>
-                    {op} ({info.totalMm} mm — {info.formula})
+                    {op} — Ocup.: {occ.larguraOcupadaMm} mm ({occ.formulaGeral}) | Folga: {info.totalMm} mm
                   </option>
                 );
               })}
             </select>
-            {incluirPortaPavimento && (
+            {incluirPortaPavimento ? (
               <p className="text-[10px] text-amber-400/90 mt-1">
                 Bloqueado com Porta de Pavimento ativa.
+              </p>
+            ) : (
+              <p
+                className={`text-[10px] font-mono mt-1 ${
+                  isLarguraPortaOk ? 'text-emerald-400/90' : 'text-rose-400 font-semibold'
+                }`}
+              >
+                {isLarguraPortaOk
+                  ? `✓ Ocupa ${doorOccupied.larguraOcupadaMm} mm (${doorOccupied.formulaTexto}) · Poço: ${paredePocoPortaEstimada} mm`
+                  : `✕ Colisão de ${doorWallCollision.colisaoMm} mm com a parede · Revise sentido ou arcada`}
               </p>
             )}
           </div>

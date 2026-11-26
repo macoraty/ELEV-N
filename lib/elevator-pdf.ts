@@ -328,9 +328,19 @@ export async function generateElevatorPdf({
     false
   );
   currentY = drawRow(
-    'Tipo de Porta do Pavimento e Cabine',
-    state.tipoPorta,
+    'Tipo e Sentido de Abertura da Porta',
+    `${state.tipoPorta} — Abertura ${results.sentidoAberturaPorta}`,
     currentY,
+    true
+  );
+  currentY = drawRow(
+    'Largura Ocupada pela Porta',
+    results.isColisaoParedePorta
+      ? `COLISÃO (${results.colisaoParedePortaMm} mm): ${results.larguraOcupadaPortaMm} mm (${results.larguraOcupadaPortaFormula}) — Revise sentido ou lado da arcada`
+      : `${results.larguraOcupadaPortaMm} mm (${results.larguraOcupadaPortaFormula}) — Parede do Poço: ${results.paredePocoPortaMm} mm`,
+    currentY,
+    false,
+    results.isColisaoParedePorta ? [220, 38, 38] : [2, 132, 199],
     true
   );
   currentY = drawRow(
@@ -438,8 +448,8 @@ export async function generateElevatorPdf({
     results.isCalculadoPorPoco ? false : true
   );
   currentY = drawRow(
-    'Folga Necessária para Recolhimento da Porta',
-    `${results.folgaPorta} mm`,
+    'Largura Ocupada / Recolhimento da Porta',
+    `${results.larguraOcupadaPortaMm} mm (${results.larguraOcupadaPortaFormula} | Recolhimento: +${results.folgaPorta} mm)`,
     currentY,
     results.isCalculadoPorPoco ? false : true
   );

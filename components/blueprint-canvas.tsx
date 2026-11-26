@@ -749,6 +749,9 @@ export function BlueprintCanvas({
         ctx.restore();
       };
 
+      const sentidoAbertura = results.sentidoAberturaPorta || 'Direita';
+      const recolhimentoDraw = !incluirPortaPavimento ? results.folgaPorta * scale : 0;
+
       const drawSlidingDoors = (
         doorType: string,
         doorStart: number,
@@ -757,22 +760,88 @@ export function BlueprintCanvas({
         landY: number,
         isVertical: boolean
       ) => {
-        const numLeaves = doorType.includes('4 Folhas')
+        const numLeaves = doorType.includes('6 Folhas')
+          ? 6
+          : doorType.includes('4 Folhas')
           ? 4
           : doorType.includes('3 Folhas')
           ? 3
           : 2;
-        const isCentral = doorType.includes('Central');
+        const isCentral = doorType.includes('Central') || sentidoAbertura === 'Central';
+        const isLeftOpen = !isCentral && sentidoAbertura === 'Esquerda';
 
         ctx.save();
         const leafThick = isHighResExport ? 4 : 2.5;
-        const stepDist = isHighResExport ? 4.5 : 2.5;
+        const stepDist = isHighResExport ? 4.2 : 2.3;
+
+        // Draw door retraction pocket / occupied width envelope (when Porta Normal)
+        if (!incluirPortaPavimento && recolhimentoDraw > 0) {
+          const bandThick = Math.max(isHighResExport ? 16 : 8, Math.abs(landY - cabY) * 0.55);
+
+          const drawPocketRect = (rx: number, ry: number, rw: number, rh: number) => {
+            const eps = 0.5;
+            const collidesWall = !isVertical
+              ? rx < pocoLeft - eps || rx + rw > pocoLeft + pocoDrawWidth + eps
+              : ry < pocoTop - eps || ry + rh > pocoTop + pocoDrawHeight + eps;
+
+            ctx.fillStyle = collidesWall
+              ? 'rgba(239, 68, 68, 0.34)'
+              : 'rgba(56, 189, 248, 0.14)';
+            ctx.strokeStyle = collidesWall ? '#EF4444' : '#38BDF8';
+            ctx.lineWidth = collidesWall
+              ? isHighResExport
+                ? 2.8
+                : 1.8
+              : isHighResExport
+              ? 1.5
+              : 1;
+            ctx.setLineDash(isHighResExport ? [6, 4] : [3, 2]);
+            ctx.fillRect(rx, ry, rw, rh);
+            ctx.strokeRect(rx, ry, rw, rh);
+            ctx.setLineDash([]);
+
+            if (collidesWall) {
+              ctx.fillStyle = '#FCA5A5';
+              ctx.font = isHighResExport
+                ? 'bold 13px ui-monospace, monospace'
+                : 'bold 7.5px ui-monospace, monospace';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('✕ COLISÃO', rx + rw / 2, ry + rh / 2);
+            }
+          };
+
+          if (!isVertical) {
+            const bandY = Math.min(cabY, landY) + Math.abs(landY - cabY) * 0.18;
+            if (isCentral) {
+              const halfPocket = recolhimentoDraw / 2;
+              drawPocketRect(doorStart - halfPocket, bandY, halfPocket, bandThick);
+              drawPocketRect(doorStart + doorWidth, bandY, halfPocket, bandThick);
+            } else if (isLeftOpen) {
+              drawPocketRect(doorStart - recolhimentoDraw, bandY, recolhimentoDraw, bandThick);
+            } else {
+              drawPocketRect(doorStart + doorWidth, bandY, recolhimentoDraw, bandThick);
+            }
+          } else {
+            const bandX = Math.min(cabY, landY) + Math.abs(landY - cabY) * 0.18;
+            if (isCentral) {
+              const halfPocket = recolhimentoDraw / 2;
+              drawPocketRect(bandX, doorStart - halfPocket, bandThick, halfPocket);
+              drawPocketRect(bandX, doorStart + doorWidth, bandThick, halfPocket);
+            } else if (isLeftOpen) {
+              drawPocketRect(bandX, doorStart - recolhimentoDraw, bandThick, recolhimentoDraw);
+            } else {
+              drawPocketRect(bandX, doorStart + doorWidth, bandThick, recolhimentoDraw);
+            }
+          }
+        }
 
         if (!isVertical) {
           if (isCentral) {
             const halfWidth = doorWidth / 2;
-            const leafWidth = halfWidth / (numLeaves / 2);
-            for (let i = 0; i < numLeaves / 2; i++) {
+            const perSide = Math.max(1, Math.floor(numLeaves / 2));
+            const leafWidth = halfWidth / perSide;
+            for (let i = 0; i < perSide; i++) {
               const step = i * stepDist;
               const lx1 = doorStart + i * leafWidth;
               const lx2 = lx1 + leafWidth - (isHighResExport ? 2.5 : 1.5);
@@ -810,7 +879,7 @@ export function BlueprintCanvas({
           } else {
             const leafWidth = doorWidth / numLeaves;
             for (let i = 0; i < numLeaves; i++) {
-              const step = i * stepDist;
+              const step = (isLeftOpen ? numLeaves - 1 - i : i) * stepDist;
               const x1 = doorStart + i * leafWidth;
               const x2 = x1 + leafWidth - (isHighResExport ? 2.5 : 1.5);
               ctx.strokeStyle = '#64FFDA';
@@ -829,26 +898,78 @@ export function BlueprintCanvas({
               ctx.stroke();
             }
           }
-        } else {
-          const leafHeight = doorWidth / numLeaves;
-          for (let i = 0; i < numLeaves; i++) {
-            const step = i * stepDist;
-            const y1 = doorStart + i * leafHeight;
-            const y2 = y1 + leafHeight - (isHighResExport ? 2.5 : 1.5);
-            ctx.strokeStyle = '#64FFDA';
-            ctx.lineWidth = leafThick;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(cabY + 2 + step, y1);
-            ctx.lineTo(cabY + 2 + step, y2);
-            ctx.stroke();
 
-            ctx.strokeStyle = landingDoorStrokeColor;
-            ctx.lineWidth = leafThick * 0.85;
-            ctx.beginPath();
-            ctx.moveTo(landY + step, y1);
-            ctx.lineTo(landY + step, y2);
-            ctx.stroke();
+          // Directional opening indicator text
+          const dirText = isCentral ? '← →' : isLeftOpen ? '← ESQ' : 'DIR →';
+          ctx.fillStyle = '#38BDF8';
+          ctx.font = isHighResExport
+            ? 'bold 14px ui-monospace, monospace'
+            : 'bold 8.5px ui-monospace, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const midY = (cabY + landY) / 2;
+          ctx.fillText(dirText, doorStart + doorWidth / 2, midY);
+        } else {
+          if (isCentral) {
+            const halfHeight = doorWidth / 2;
+            const perSide = Math.max(1, Math.floor(numLeaves / 2));
+            const leafHeight = halfHeight / perSide;
+            for (let i = 0; i < perSide; i++) {
+              const step = i * stepDist;
+              const ty1 = doorStart + i * leafHeight;
+              const ty2 = ty1 + leafHeight - (isHighResExport ? 2.5 : 1.5);
+              ctx.strokeStyle = '#64FFDA';
+              ctx.lineWidth = leafThick;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.moveTo(cabY + 2 + step, ty1);
+              ctx.lineTo(cabY + 2 + step, ty2);
+              ctx.stroke();
+
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
+              ctx.beginPath();
+              ctx.moveTo(landY + step, ty1);
+              ctx.lineTo(landY + step, ty2);
+              ctx.stroke();
+
+              const by2 = doorStart + doorWidth - i * leafHeight;
+              const by1 = by2 - leafHeight + (isHighResExport ? 2.5 : 1.5);
+              ctx.strokeStyle = '#64FFDA';
+              ctx.lineWidth = leafThick;
+              ctx.beginPath();
+              ctx.moveTo(cabY + 2 + step, by1);
+              ctx.lineTo(cabY + 2 + step, by2);
+              ctx.stroke();
+
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
+              ctx.beginPath();
+              ctx.moveTo(landY + step, by1);
+              ctx.lineTo(landY + step, by2);
+              ctx.stroke();
+            }
+          } else {
+            const leafHeight = doorWidth / numLeaves;
+            for (let i = 0; i < numLeaves; i++) {
+              const step = (isLeftOpen ? numLeaves - 1 - i : i) * stepDist;
+              const y1 = doorStart + i * leafHeight;
+              const y2 = y1 + leafHeight - (isHighResExport ? 2.5 : 1.5);
+              ctx.strokeStyle = '#64FFDA';
+              ctx.lineWidth = leafThick;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.moveTo(cabY + 2 + step, y1);
+              ctx.lineTo(cabY + 2 + step, y2);
+              ctx.stroke();
+
+              ctx.strokeStyle = landingDoorStrokeColor;
+              ctx.lineWidth = leafThick * 0.85;
+              ctx.beginPath();
+              ctx.moveTo(landY + step, y1);
+              ctx.lineTo(landY + step, y2);
+              ctx.stroke();
+            }
           }
         }
         ctx.restore();
@@ -1322,12 +1443,12 @@ export function BlueprintCanvas({
       );
 
       const montanteMm = Math.max(0, Math.round((ladoEfetivoMm - aberturaPorta) / 2));
-      ctx.fillStyle = isPortaMenor ? '#FFAB40' : '#EF4444';
+      ctx.fillStyle = isPortaMenor && !results.isColisaoParedePorta ? '#FFAB40' : '#EF4444';
       const pavSuffix = incluirPortaPavimento
         ? ` | P.Pav ${folgaFrontalMm}mm (${portaPavimentoMm}+${folgaEntrePortasMm})`
-        : ` | Folga ${folgaFrontalMm}mm (${results.folgaPortaNormalFormula})`;
+        : ` | Ocup. ${results.larguraOcupadaPortaMm}mm | Folga ${folgaFrontalMm}mm`;
       ctx.fillText(
-        `PORTA: ${state.tipoPorta} (${state.aberturaPorta}mm)${pavSuffix}`,
+        `PORTA: ${state.tipoPorta} (${results.sentidoAberturaPorta}, ${state.aberturaPorta}mm)${pavSuffix}`,
         tbLeft + (isHighResExport ? 16 : 8),
         tbTop + (isHighResExport ? 124 : isCompact ? 64 : 72)
       );
@@ -1339,12 +1460,20 @@ export function BlueprintCanvas({
         tbTop + (isHighResExport ? 148 : isCompact ? 76 : 86)
       );
 
-      // Warning alert banner on drawing if door is invalid (> face)
-      if (!isPortaMenor) {
-        ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
-        const warnW = isHighResExport ? 860 : isCompact ? 280 : 420;
-        const warnH = isHighResExport ? 44 : isCompact ? 22 : 26;
+      // Red warning alert banner on drawing if door is invalid (> face) or collides with shaft wall
+      if (!isPortaMenor || results.isColisaoParedePorta) {
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.96)';
+        const warnW = isHighResExport ? 1060 : isCompact ? 320 : 540;
+        const warnH = isHighResExport ? 46 : isCompact ? 24 : 28;
         ctx.fillRect(
+          isHighResExport ? 30 : 14,
+          isHighResExport ? 125 : 74,
+          warnW,
+          warnH
+        );
+        ctx.strokeStyle = '#FCA5A5';
+        ctx.lineWidth = isHighResExport ? 2 : 1;
+        ctx.strokeRect(
           isHighResExport ? 30 : 14,
           isHighResExport ? 125 : 74,
           warnW,
@@ -1352,15 +1481,17 @@ export function BlueprintCanvas({
         );
         ctx.fillStyle = '#FFFFFF';
         ctx.font = isHighResExport
-          ? 'bold 18px system-ui, sans-serif'
+          ? 'bold 16px system-ui, sans-serif'
           : isCompact
-          ? 'bold 8px system-ui, sans-serif'
+          ? 'bold 7.5px system-ui, sans-serif'
           : 'bold 10px system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(
-          `⚠️ ATENÇÃO: Abertura da porta (${state.aberturaPorta} mm) não pode ser maior que a face da cabine (${ladoEfetivoMm} mm)!`,
+          !isPortaMenor
+            ? `⚠️ ATENÇÃO: Abertura da porta (${state.aberturaPorta} mm) não pode ser maior que a face da cabine (${ladoEfetivoMm} mm)!`
+            : `⚠️ COLISÃO COM A PAREDE (${results.colisaoParedePortaMm} mm): Revise o sentido de abertura da porta ou o lado da arcada!`,
           isHighResExport ? 42 : 20,
-          isHighResExport ? 152 : isCompact ? 89 : 91
+          isHighResExport ? 153 : isCompact ? 89 : 92
         );
       }
 
